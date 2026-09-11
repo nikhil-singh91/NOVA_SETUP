@@ -175,6 +175,7 @@ class NovaApplication:
             (self._initialize_mac_control, "mac_control"),
             (self._initialize_desktop, "desktop"),
             (self._initialize_browser, "browser"),
+            (self._initialize_computer_agent, "computer_agent"),
         ]:
             t = threading.Thread(target=_run_init, args=(init_fn, name), daemon=True, name=f"nova-init-{name}")
             t.start()
@@ -301,6 +302,14 @@ class NovaApplication:
             logger.info("Browser Actions subsystem initialized.")
         except Exception as exc:
             logger.warning("Browser Actions initialization note: %s", exc)
+
+    def _initialize_computer_agent(self) -> None:
+        """Initialize NOVA Eyes + Computer Interaction Agent."""
+        try:
+            self.computer_agent.initialize()
+            logger.info("ComputerAgent (NOVA Eyes) initialized.")
+        except Exception as exc:
+            logger.warning("ComputerAgent initialization note: %s", exc)
 
     def _initialize_voice(self) -> None:
         """Initialize Voice V2 subsystem."""
@@ -1621,6 +1630,11 @@ class NovaApplication:
             self.browser_manager.shutdown()
         except Exception as exc:
             logger.error("Error shutting down BrowserManager: %s", exc)
+
+        try:
+            self.computer_agent.eyes.stop()
+        except Exception as exc:
+            logger.debug("Error stopping NOVA Eyes: %s", exc)
 
         if self.provider_manager is not None:
             try:

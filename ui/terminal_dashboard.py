@@ -515,6 +515,16 @@ class TerminalDashboard:
                     access_fmt = f"[yellow]{access_state}[/yellow]"
                 cmd_table.add_row("Access:", access_fmt)
 
+                eyes_info = DashboardStatsManager.get_eyes_status()
+                eyes_state = eyes_info.get("status", "ACTIVE")
+                if eyes_state == "ACTIVE":
+                    eyes_fmt = "[bold bright_green]ACTIVE (RAM/Local)[/bold bright_green]"
+                elif eyes_state == "PAUSED":
+                    eyes_fmt = "[bold yellow]PAUSED[/bold yellow]"
+                else:
+                    eyes_fmt = f"[bold cyan]{eyes_state}[/bold cyan]"
+                cmd_table.add_row("NOVA Eyes:", eyes_fmt)
+
                 layout["commands"].update(Panel(cmd_table, title="🖥️ Mac Control", border_style="magenta"))
 
                 # F. Active System Recovery Alerts (Lower Right)

@@ -426,6 +426,24 @@ class DashboardStatsManager:
             cls._stats[key] = value
 
     @classmethod
+    def get_eyes_status(cls) -> dict[str, Any]:
+        """Fetch current real-time status and metrics from NOVA Eyes."""
+        try:
+            from core.eyes import nova_eyes
+            return nova_eyes.get_status()
+        except Exception:
+            return {
+                "status": "UNAVAILABLE",
+                "capture_engine": "None",
+                "semantic_engine": "None",
+                "vision_engine": "None",
+                "ocr_mode": "Local-first",
+                "disk_storage": "OFF",
+                "recording": "OFF",
+                "cloud_streaming": "OFF",
+            }
+
+    @classmethod
     def get_all(cls) -> dict[str, Any]:
         with cls._lock:
             return dict(cls._stats)
