@@ -1,0 +1,393 @@
+{
+  "version": "current",
+  "categories": [
+    {
+      "name": "System Control",
+      "features": [
+        {
+          "name": "Volume",
+          "status": "working",
+          "commands": [
+            "increase volume",
+            "decrease volume",
+            "set volume to 70%",
+            "set volume to 100%",
+            "make volume 50%",
+            "mute volume",
+            "unmute volume",
+            "what is the volume"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Brightness",
+          "status": "working",
+          "commands": [
+            "increase brightness",
+            "decrease brightness",
+            "set brightness to 80%",
+            "set brightness to 50%",
+            "make screen brighter",
+            "check brightness"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "Wi-Fi",
+          "status": "working",
+          "commands": [
+            "is wi-fi on",
+            "check wi-fi status",
+            "what wi-fi am i connected to",
+            "turn wi-fi on",
+            "turn wi-fi off"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Bluetooth",
+          "status": "partially_working",
+          "commands": [
+            "is bluetooth on",
+            "check bluetooth status",
+            "turn bluetooth on",
+            "turn bluetooth off"
+          ],
+          "requires_permission": true,
+          "notes": "Status query works natively; toggling requires external CLI utility blueutil"
+        },
+        {
+          "name": "Clipboard",
+          "status": "working",
+          "commands": [
+            "what is in my clipboard",
+            "read clipboard",
+            "clear clipboard"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Lock Screen",
+          "status": "working",
+          "commands": [
+            "lock screen",
+            "lock my mac",
+            "lock computer"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "System Shutdown",
+          "status": "working",
+          "commands": [
+            "shut down my mac",
+            "shutdown system"
+          ],
+          "requires_permission": true,
+          "notes": "Guarded by mandatory spoken confirmation prompt"
+        }
+      ]
+    },
+    {
+      "name": "Application Control",
+      "features": [
+        {
+          "name": "Launch Application",
+          "status": "working",
+          "commands": [
+            "open telegram",
+            "open vs code",
+            "open google chrome",
+            "open spotify",
+            "open textedit",
+            "open calculator",
+            "open terminal",
+            "open finder"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Quit Application",
+          "status": "working",
+          "commands": [
+            "close telegram",
+            "quit vs code",
+            "close google chrome",
+            "close textedit"
+          ],
+          "requires_permission": false
+        }
+      ]
+    },
+    {
+      "name": "Browser & Web Control",
+      "features": [
+        {
+          "name": "Open Website",
+          "status": "working",
+          "commands": [
+            "open youtube",
+            "open flipkart",
+            "open amazon",
+            "open github",
+            "open wikipedia",
+            "open aktu website",
+            "open google"
+          ],
+          "requires_permission": true,
+          "notes": "Requires macOS AppleScript Automation permission for Chrome/Safari"
+        },
+        {
+          "name": "In-Site Search",
+          "status": "working",
+          "commands": [
+            "search youtube for dsa tutorials",
+            "search flipkart for mobile phones",
+            "search amazon for headphones",
+            "search github for fast whisper"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "Web Search",
+          "status": "working",
+          "commands": [
+            "search the web for binary tree problems",
+            "google search python asyncio tutorial"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "YouTube Shorts",
+          "status": "working",
+          "commands": [
+            "open youtube shorts",
+            "play shorts",
+            "start auto shorts",
+            "stop auto shorts"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "Tab Management",
+          "status": "working",
+          "commands": [
+            "next tab",
+            "previous tab",
+            "close tab",
+            "close nova tabs"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "Page Navigation & Scrolling",
+          "status": "working",
+          "commands": [
+            "scroll down",
+            "scroll up",
+            "scroll to top",
+            "scroll to bottom",
+            "go back",
+            "go forward"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "Page Reading & Summarization",
+          "status": "working",
+          "commands": [
+            "read what's on this page",
+            "summarize this webpage",
+            "explain this page"
+          ],
+          "requires_permission": true
+        }
+      ]
+    },
+    {
+      "name": "Screen Control",
+      "features": [
+        {
+          "name": "Screenshot",
+          "status": "working",
+          "commands": [
+            "take a screenshot",
+            "capture screenshot",
+            "capture the screen",
+            "screenshot lo"
+          ],
+          "requires_permission": true,
+          "notes": "Requires macOS Screen Recording permission"
+        },
+        {
+          "name": "Screen Recording",
+          "status": "working",
+          "commands": [
+            "start screen recording",
+            "start recording my screen",
+            "stop screen recording",
+            "finish screen recording"
+          ],
+          "requires_permission": true,
+          "notes": "Requires macOS Screen Recording permission"
+        },
+        {
+          "name": "Screen Awareness & Error Explanation",
+          "status": "working",
+          "commands": [
+            "what am i looking at",
+            "what is on my screen",
+            "what error is on my screen",
+            "explain this error"
+          ],
+          "requires_permission": true,
+          "notes": "Uses Accessibility Tree extraction and AI vision reasoning"
+        }
+      ]
+    },
+    {
+      "name": "Mouse & Cursor Control",
+      "features": [
+        {
+          "name": "UI Element Clicking",
+          "status": "working",
+          "commands": [
+            "click login",
+            "click submit",
+            "click search",
+            "click download"
+          ],
+          "requires_permission": true,
+          "notes": "Requires macOS Accessibility permission"
+        },
+        {
+          "name": "Dismiss Popup",
+          "status": "working",
+          "commands": [
+            "close popup",
+            "dismiss dialog",
+            "close alert"
+          ],
+          "requires_permission": true
+        },
+        {
+          "name": "Visual Target Scroll",
+          "status": "working",
+          "commands": [
+            "scroll down until you find pricing",
+            "scroll until you find download"
+          ],
+          "requires_permission": true
+        }
+      ]
+    },
+    {
+      "name": "Keyboard & Typing",
+      "features": [
+        {
+          "name": "Type UI Text",
+          "status": "working",
+          "commands": [
+            "type admin in username",
+            "enter test in search"
+          ],
+          "requires_permission": true,
+          "notes": "Dispatches hardware Quartz keystrokes; requires Accessibility permission"
+        }
+      ]
+    },
+    {
+      "name": "Document Authoring",
+      "features": [
+        {
+          "name": "TextEdit Document Writer",
+          "status": "working",
+          "commands": [
+            "write an application for college leave in textedit",
+            "write a bubble sort program in textedit",
+            "write a python program to reverse a string in textedit",
+            "open textedit and write notes on operating systems"
+          ],
+          "requires_permission": false,
+          "notes": "Synthesizes document content via AI, writes to disk, and opens in TextEdit"
+        }
+      ]
+    },
+    {
+      "name": "Files & Folders",
+      "features": [
+        {
+          "name": "Create Folder",
+          "status": "working",
+          "commands": [
+            "create a folder called dsa on desktop",
+            "make a folder named college in documents",
+            "create a folder called trees inside my dsa folder"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Open Folder",
+          "status": "working",
+          "commands": [
+            "open my dsa folder",
+            "open downloads folder",
+            "open it"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Create File",
+          "status": "working",
+          "commands": [
+            "create a file called main.cpp on desktop",
+            "create readme.md"
+          ],
+          "requires_permission": false
+        },
+        {
+          "name": "Safe Trash Item",
+          "status": "working",
+          "commands": [
+            "delete dsa folder",
+            "delete this file"
+          ],
+          "requires_permission": true,
+          "notes": "Protected by mandatory user confirmation before moving to ~/.Trash"
+        }
+      ]
+    },
+    {
+      "name": "Multitasking & Autonomous Tasks",
+      "features": [
+        {
+          "name": "Compound Goal Execution",
+          "status": "working",
+          "commands": [
+            "create a folder called dsa project on desktop with arrays, linkedlist and trees folders",
+            "create a c++ project with main.cpp and readme.md",
+            "search the web for dsa roadmap and save the link in a file on desktop"
+          ],
+          "requires_permission": false,
+          "notes": "Executed by Task Agent V3 planner/executor across 22 verified capabilities"
+        }
+      ]
+    },
+    {
+      "name": "Conversational AI",
+      "features": [
+        {
+          "name": "General Q&A and Explanations",
+          "status": "working",
+          "commands": [
+            "explain dijkstra's algorithm",
+            "what is the difference between a process and a thread",
+            "who was alan turing"
+          ],
+          "requires_permission": false,
+          "notes": "Powered by ProviderManager fallback chain (Gemini, Groq, OpenRouter, Cerebras)"
+        }
+      ]
+    }
+  ]
+}

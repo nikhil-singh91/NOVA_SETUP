@@ -1,0 +1,67 @@
+# =====================================================================
+# NOVA_SETUP — Git Ignore Rules
+# =====================================================================
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+credentials.json
+client_secret*.json
+*.pem
+*.key
+*.cert
+
+# Python & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE & OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.vscode/
+.idea/
+* 2.*
+* 3.*
+
+
+# Application Logs & Temporary Output
+logs/
+*.log
+data/*.db
+data/*.sqlite
+
+# NOVA Eyes / Screen Capture / Media Runtime Artifacts
+NOVA Recordings/
+NOVA Screenshots/
+NOVA Camera/
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+
+# Frontend & Node Dependencies
+node_modules/
+**/node_modules/
+dist/
+build/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

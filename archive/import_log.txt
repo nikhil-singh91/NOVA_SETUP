@@ -1,0 +1,124 @@
+import time: self [us] | cumulative | imported package
+import time:       161 |        161 |   _io
+import time:       145 |        145 |   marshal
+import time:       484 |        484 |   posix
+import time:       374 |       1163 | _frozen_importlib_external
+import time:       399 |        399 |   time
+import time:        80 |        479 | zipimport
+import time:        89 |         89 |     _codecs
+import time:       134 |        222 |   codecs
+import time:       364 |        364 |   encodings.aliases
+import time:       469 |       1055 | encodings
+import time:       128 |        128 | encodings.utf_8
+import time:        57 |         57 | _signal
+import time:        15 |         15 |     _abc
+import time:        67 |         81 |   abc
+import time:        86 |        166 | io
+import time:        27 |         27 |       _stat
+import time:        46 |         73 |     stat
+import time:       438 |        438 |     _collections_abc
+import time:        24 |         24 |       genericpath
+import time:        33 |         56 |     posixpath
+import time:       173 |        738 |   os
+import time:        33 |         33 |   _sitebuiltins
+import time:       153 |        153 |         types
+import time:        40 |         40 |           _operator
+import time:       159 |        199 |         operator
+import time:        62 |         62 |             itertools
+import time:        70 |         70 |             keyword
+import time:       104 |        104 |             reprlib
+import time:        31 |         31 |             _collections
+import time:       522 |        787 |           collections
+import time:        24 |         24 |           _functools
+import time:       343 |       1153 |         functools
+import time:       909 |       2412 |       enum
+import time:       100 |        100 |         _sre
+import time:       265 |        265 |           re._constants
+import time:       363 |        628 |         re._parser
+import time:        81 |         81 |         re._casefix
+import time:       346 |       1154 |       re._compiler
+import time:        96 |         96 |       copyreg
+import time:       301 |       3961 |     re
+import time:       454 |       4415 |   sitecustomize
+import time:       875 |       6059 | site
+import time:       169 |        169 | __future__
+import time:       169 |        169 |     _weakrefset
+import time:       524 |        693 |   threading
+import time:       622 |        622 |     _heapq
+import time:       280 |        902 |   heapq
+import time:       940 |        940 |   _queue
+import time:       491 |       3024 | queue
+import time:       448 |        448 | signal
+import time:       587 |        587 |   _uuid
+import time:       398 |        985 | uuid
+import time:       221 |        221 |     weakref
+import time:       112 |        333 |   copy
+import time:       614 |        614 |       _ast
+import time:       331 |        331 |       contextlib
+import time:      1105 |       2049 |     ast
+import time:       288 |        288 |         _opcode
+import time:       235 |        523 |       opcode
+import time:       449 |        971 |     dis
+import time:       108 |        108 |     collections.abc
+import time:       156 |        156 |         warnings
+import time:        92 |        248 |       importlib
+import time:        27 |        274 |     importlib.machinery
+import time:        97 |         97 |         token
+import time:        13 |         13 |         _tokenize
+import time:       464 |        574 |       tokenize
+import time:        80 |        653 |     linecache
+import time:       987 |       5041 |   inspect
+import time:       441 |       5813 | dataclasses
+import time:       497 |        497 |   _datetime
+import time:        92 |        588 | datetime
+import time:        17 |         17 |   _typing
+import time:      1264 |       1280 | typing
+import time:       428 |        428 |   core
+import time:       584 |       1012 | core.exceptions
+import time:        58 |         58 |     config
+import time:       426 |        426 |         textwrap
+import time:       520 |        945 |       traceback
+import time:        15 |         15 |         _string
+import time:       535 |        550 |       string
+import time:        17 |         17 |       atexit
+import time:      1115 |       2625 |     logging
+import time:       564 |        564 |                 _socket
+import time:      1000 |       1563 |               typing_extensions
+import time:       798 |        798 |               pydantic_core._pydantic_core
+import time:       227 |        227 |                     numbers
+import time:       795 |       1022 |                   _decimal
+import time:        77 |       1098 |                 decimal
+import time:      4598 |       5696 |               pydantic_core.core_schema
+import time:       268 |       8323 |             pydantic_core
+import time:        87 |       8410 |           pydantic.version
+import time:       212 |       8622 |         pydantic.warnings
+import time:       180 |       8801 |       pydantic._migration
+import time:        87 |         87 |           typing_inspection
+import time:       658 |        658 |           typing_inspection.typing_objects
+import time:       429 |       1173 |         typing_inspection.introspection
+import time:       116 |        116 |         pydantic._internal
+import time:  24487744 |   24487744 |           pydantic._internal._typing_extra
+import time:       442 |   24488186 |         pydantic._internal._repr
+import time:       205 |   24489678 |       pydantic.errors
+import time:       276 |   24498755 |     pydantic
+import time:       294 |   24501731 |   config.settings
+import time:       300 |   24502030 | core.lifecycle
+Traceback (most recent call last):
+  File "/Users/nikhilsingh/Desktop/PROJECT/main.py", line 56, in <module>
+    from core.lifecycle import lifecycle
+  File "/Users/nikhilsingh/Desktop/PROJECT/core/lifecycle.py", line 37, in <module>
+    from config.settings import settings
+  File "/Users/nikhilsingh/Desktop/PROJECT/config/settings.py", line 9, in <module>
+    from pydantic import Field, SecretStr, ValidationError, field_validator
+  File "/Users/nikhilsingh/Desktop/PROJECT/.venv/lib/python3.12/site-packages/pydantic/__init__.py", line 422, in <module>
+  File "/Users/nikhilsingh/Desktop/PROJECT/.venv/lib/python3.12/site-packages/pydantic/_migration.py", line 263, in getattr_migration
+  File "/Users/nikhilsingh/Desktop/PROJECT/.venv/lib/python3.12/site-packages/pydantic/errors.py", line 10, in <module>
+    from pydantic._internal import _repr
+  File "/Users/nikhilsingh/Desktop/PROJECT/.venv/lib/python3.12/site-packages/pydantic/_internal/_repr.py", line 13, in <module>
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1091, in get_code
+  File "<frozen importlib._bootstrap_external>", line 1191, in get_data
+KeyboardInterrupt

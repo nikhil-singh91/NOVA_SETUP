@@ -1,0 +1,592 @@
+{
+  "memories": [
+    {
+      "id": "40968dd90b664f8da4290481350c4910",
+      "category": "coding",
+      "key": "turn-b366a696",
+      "value": "User: python3 -u \"/Users/nikhilsingh/Desktop/PROJECT/main.py\"\nNOVA: Awesome, Boss! `main.py` phir se run ho gaya!\n\nKya baat hai, is baar kya magic hua? Pichli baar se kuch naya, ya jo expect kar rahe the, woh mil gaya? Batao, batao, kya output aaya?",
+      "importance": 3,
+      "tags": [
+        "coding"
+      ],
+      "created_at": "2026-07-06T09:40:17.898232+00:00",
+      "updated_at": "2026-07-06T09:40:17.898232+00:00"
+    },
+    {
+      "id": "156096c5675046dc880593fe23e1dfe1",
+      "category": "coding",
+      "key": "turn-0f60dff8",
+      "value": "User: aaj main tumhre andr nye method implement kruga so tum mujhse baat kr sko i can speak with u??\nNOVA: Boss, aaj ka din coding ka hai. Aapne jo method implement karne ka plan banaya hai, uspe hum milkar kaam karenge. Main aapke saath baat karne ke liye tayyar hoon, aap apne vichar share kijiye aur hum milke is method ko design aur implement karenge. \n\nAap jo bhi soch rahe hain, usse mujhe bataiye, main aapko apne experience aur knowledge ke hisab se suggestions aur ideas provide karunga. Hum is method ko sahi se design karenge, uske baad Python code likhenge, aur phir usko test karenge. \n\nToh, aapne jo method implement karna hai, uska naam kya hai aur uska kya purpose hai? Hum usse shuru karte hain.",
+      "importance": 3,
+      "tags": [
+        "coding"
+      ],
+      "created_at": "2026-07-06T10:32:43.934777+00:00",
+      "updated_at": "2026-07-06T10:32:43.934777+00:00"
+    },
+    {
+      "id": "2a6a516b5ca54e478bdd12aed09f5edd",
+      "category": "education",
+      "key": "turn-9981f235",
+      "value": "User: i want to know about founder of mirai school of technology what is the name??\nNOVA: The founder of Mirai School of Technology is Dr. Shubham K. Verma. He established the school to focus on fostering innovative technology education and skills. If you need more information about the school or its programs, just let me know!",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-06T10:57:00.254011+00:00",
+      "updated_at": "2026-07-06T10:57:00.254011+00:00"
+    },
+    {
+      "id": "01028f9bca494763b1309ad8a2c73d87",
+      "category": "coding",
+      "key": "turn-9002faa7",
+      "value": "User: were working on integrating the new API and I've got all the notes from our last\nNOVA: boss, kal hum integration ke baare mein discuss kar rahe the, aur tumne notes bhi le liye the, ab kya haal hai, kis cheez par humko focus karna chahiye, API ke endpoints set up ho gaye hain ya abhi humko configuration pe kaam karna hai?",
+      "importance": 3,
+      "tags": [
+        "coding"
+      ],
+      "created_at": "2026-07-06T16:33:29.193589+00:00",
+      "updated_at": "2026-07-06T16:33:29.193589+00:00"
+    },
+    {
+      "id": "667f6e3ee38348e3b83a3c1406c093fb",
+      "category": "education",
+      "key": "turn-788b522c",
+      "value": "User: Can you explain how to find the length of an array in your preferred programming language?\nNOVA: Sure, let's talk about finding the length of an array. I like using Python for its simplicity, so I'll explain it in that context. \n\nIn Python, you can find the length of an array (which is called a list in Python) using the `len()` function. Here’s how it works:\n\n1. First, you define your list. For example, let’s say you have a list of fruits: `fruits = ['apple', 'banana', 'cherry']`.\n\n2. To find the length, you just call `len(fruits)`. This will return the number of items in the list.\n\nSo if you run `print(len(fruits))`, it will output `3`, because there are three items in the list.\n\nWould you like to see how it's done in another language, or does this make sense?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-07T05:33:51.310538+00:00",
+      "updated_at": "2026-07-07T05:33:51.310538+00:00"
+    },
+    {
+      "id": "eb88a47c2f404720bf69d3fdf1f1483e",
+      "category": "conversations",
+      "key": "last_session_summary",
+      "value": "project=none; topic=none; session_length=0:01:59.552239",
+      "importance": 2,
+      "tags": [
+        "session_breadcrumb"
+      ],
+      "created_at": "2026-07-07T06:20:20.394964+00:00",
+      "updated_at": "2026-09-10T17:15:41.032849+00:00"
+    },
+    {
+      "id": "82cc586d948e490da61b18e5db50125b",
+      "category": "education",
+      "key": "turn-b72a0992",
+      "value": "User: What is the time now?\nNOVA: Hey Boss, abhi 7:34 PM ho rahe hain, July 7th, 2026.",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-07T14:04:45.399086+00:00",
+      "updated_at": "2026-07-07T14:04:45.399086+00:00"
+    },
+    {
+      "id": "d223e66eb93a4d39bd1ec952a51b0459",
+      "category": "education",
+      "key": "turn-4fe44222",
+      "value": "User: Okay, good evening Nova. How's the, what is the time now?\nNOVA: Good evening Boss. Abhi 9:48 PM ho rahe hain, July 8th, 2026. Sab theek chal raha hai. Aap kaise hain?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-08T16:18:20.585678+00:00",
+      "updated_at": "2026-07-08T16:18:20.585678+00:00"
+    },
+    {
+      "id": "85098bf2178f455eb110afc3ce6946e6",
+      "category": "education",
+      "key": "turn-dea886ea",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T05:54:16.954427+00:00",
+      "updated_at": "2026-07-10T05:54:16.954427+00:00"
+    },
+    {
+      "id": "eb28a3389d5a4c9a81532e26283f83ee",
+      "category": "education",
+      "key": "turn-6397e118",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T06:20:46.511198+00:00",
+      "updated_at": "2026-07-10T06:20:46.511198+00:00"
+    },
+    {
+      "id": "ffa882f1178f42f481efb29cdc0a6780",
+      "category": "education",
+      "key": "turn-3ac3d208",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T06:52:06.472241+00:00",
+      "updated_at": "2026-07-10T06:52:06.472241+00:00"
+    },
+    {
+      "id": "0cd30e1c2eb7461abdb8ad17ea397c48",
+      "category": "education",
+      "key": "turn-b22092d5",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T07:56:03.618947+00:00",
+      "updated_at": "2026-07-10T07:56:03.618947+00:00"
+    },
+    {
+      "id": "5e1ed3bdfd5f49a38209ff08828d1424",
+      "category": "education",
+      "key": "turn-04b1497b",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T07:56:51.957496+00:00",
+      "updated_at": "2026-07-10T07:56:51.957496+00:00"
+    },
+    {
+      "id": "fd688880dcaa4b62ad13cffe8efc447c",
+      "category": "education",
+      "key": "turn-3c2c7019",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T08:08:21.879566+00:00",
+      "updated_at": "2026-07-10T08:08:21.879566+00:00"
+    },
+    {
+      "id": "b147801f21374d72a26d7d2d778178d8",
+      "category": "education",
+      "key": "turn-ca47af26",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T08:12:09.419129+00:00",
+      "updated_at": "2026-07-10T08:12:09.419129+00:00"
+    },
+    {
+      "id": "cfda6ca121964e61aeccba5099ef2584",
+      "category": "education",
+      "key": "turn-94ed736e",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T08:13:59.686327+00:00",
+      "updated_at": "2026-07-10T08:13:59.686327+00:00"
+    },
+    {
+      "id": "28f7a62a49a24247bff0f75ca6e8bf06",
+      "category": "education",
+      "key": "turn-7edf82ed",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T08:27:27.530399+00:00",
+      "updated_at": "2026-07-10T08:27:27.530399+00:00"
+    },
+    {
+      "id": "216f4fb0b3c140749d811792b19e545c",
+      "category": "education",
+      "key": "turn-876cc88e",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T14:39:19.265957+00:00",
+      "updated_at": "2026-07-10T14:39:19.265957+00:00"
+    },
+    {
+      "id": "a851fd3bd1f64180ac68cee0eecf02c9",
+      "category": "education",
+      "key": "turn-10bad444",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T14:42:53.007363+00:00",
+      "updated_at": "2026-07-10T14:42:53.007363+00:00"
+    },
+    {
+      "id": "1168758d053a4eedaff1967188c14fef",
+      "category": "education",
+      "key": "turn-93e7095c",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T16:30:32.029399+00:00",
+      "updated_at": "2026-07-10T16:30:32.029399+00:00"
+    },
+    {
+      "id": "09f920e76a754348abbb51ec6849246e",
+      "category": "education",
+      "key": "turn-eb0b9fcf",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T16:44:05.508247+00:00",
+      "updated_at": "2026-07-10T16:44:05.508247+00:00"
+    },
+    {
+      "id": "dfa89c52a5514db7ad44696f6a066f95",
+      "category": "education",
+      "key": "turn-a0023f26",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T16:53:57.330226+00:00",
+      "updated_at": "2026-07-10T16:53:57.330226+00:00"
+    },
+    {
+      "id": "95ba26256f374a5e918c3d0c89e83951",
+      "category": "education",
+      "key": "turn-5daacb09",
+      "value": "User: Hello, NOVA, what is the time now?\nNOVA: Hello Boss! Abhi 10:25 PM ho rahe hain, July 10th, 2026.",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T16:55:50.011709+00:00",
+      "updated_at": "2026-07-10T16:55:50.011709+00:00"
+    },
+    {
+      "id": "baebd4cbeca34b68b40dcbf18439fdec",
+      "category": "education",
+      "key": "turn-f178fcaf",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T17:02:31.755802+00:00",
+      "updated_at": "2026-07-10T17:02:31.755802+00:00"
+    },
+    {
+      "id": "957cb349af24443b87e6e7420d497d3f",
+      "category": "education",
+      "key": "turn-a04bc881",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T17:17:06.913248+00:00",
+      "updated_at": "2026-07-10T17:17:06.913248+00:00"
+    },
+    {
+      "id": "80b4e817ecea4e438cb53a4ab3d8d73a",
+      "category": "education",
+      "key": "turn-e6a9bb73",
+      "value": "User: Hello, Nova. Can you tell me what is love?\nNOVA: Hey Boss! Love is one of those big topics that can be a bit tricky to define. At its core, love often involves deep affection, care, and connection towards someone or something. It can take many forms—romantic love, familial love, friendship, or even love for activities and passions.\n\nRomantic love usually includes elements like attraction, intimacy, and emotional bonding. Familial love is about the bond between family members, often grounded in loyalty and support. Friendship love is based on mutual respect, trust, and companionship.\n\nPhilosophically, love can be seen as a driving force that connects people, motivates actions, and enriches life experiences. It can bring joy, but also challenges, as relationships can be complex.\n\nDoes that resonate with what you were thinking?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-10T18:25:26.910902+00:00",
+      "updated_at": "2026-07-10T18:25:26.910902+00:00"
+    },
+    {
+      "id": "395c0814f5984f0aba41cdf8ec220ca5",
+      "category": "education",
+      "key": "turn-ba0ee035",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T02:19:03.165990+00:00",
+      "updated_at": "2026-07-11T02:19:03.165990+00:00"
+    },
+    {
+      "id": "6db0efa31def4ed397a722f4e9855058",
+      "category": "education",
+      "key": "turn-3afe6822",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T02:38:55.213747+00:00",
+      "updated_at": "2026-07-11T02:38:55.213747+00:00"
+    },
+    {
+      "id": "fce58a78b03f4fcfad74208173432019",
+      "category": "education",
+      "key": "turn-3e92e56f",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T03:12:27.899061+00:00",
+      "updated_at": "2026-07-11T03:12:27.899061+00:00"
+    },
+    {
+      "id": "21619f1ad7dd4b42910d517cdd25d3fb",
+      "category": "education",
+      "key": "turn-4f0d720d",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T03:29:50.365857+00:00",
+      "updated_at": "2026-07-11T03:29:50.365857+00:00"
+    },
+    {
+      "id": "6b9544991df4467cbc9346e4cc6b0b83",
+      "category": "education",
+      "key": "turn-63dc0021",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T03:38:14.643179+00:00",
+      "updated_at": "2026-07-11T03:38:14.643179+00:00"
+    },
+    {
+      "id": "ac7ebb2a81e042a6b08e6c4ff294a420",
+      "category": "education",
+      "key": "turn-862975bf",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T03:55:01.957214+00:00",
+      "updated_at": "2026-07-11T03:55:01.957214+00:00"
+    },
+    {
+      "id": "595e6c9c6c6143f0bc002817538efa20",
+      "category": "education",
+      "key": "turn-a5ba917c",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T04:08:23.169477+00:00",
+      "updated_at": "2026-07-11T04:08:23.169477+00:00"
+    },
+    {
+      "id": "1859a31b253945ebbd9ea1784496cecc",
+      "category": "education",
+      "key": "turn-dcf9d6f4",
+      "value": "User: Can you search on chrome, what is sky?\nNOVA: Boss, I can't browse the internet directly or search on Chrome. But I can definitely tell you about the sky! \n\nThe sky is the expanse of air that surrounds the Earth, and it appears blue during the day due to the scattering of sunlight by the atmosphere. It's where we see clouds, birds, and planes. At night, it becomes a canvas for stars, planets, and the moon. \n\nThe sky also plays a significant role in weather, as it's where all the weather phenomena occur, like rain, snow, and storms. \n\nIs there something specific about the sky you want to know more about?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-11T05:26:11.544735+00:00",
+      "updated_at": "2026-07-11T05:26:11.544735+00:00"
+    },
+    {
+      "id": "03263ff462ee4a9cbd0b1b570fc55f96",
+      "category": "education",
+      "key": "turn-d72f6063",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-12T05:51:02.512832+00:00",
+      "updated_at": "2026-07-12T05:51:02.512832+00:00"
+    },
+    {
+      "id": "191832e3b61246b39d251bd222c1d5a3",
+      "category": "education",
+      "key": "turn-9fb270d2",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-12T07:03:37.414119+00:00",
+      "updated_at": "2026-07-12T07:03:37.414119+00:00"
+    },
+    {
+      "id": "2527331331c24baea88907c61a217613",
+      "category": "education",
+      "key": "turn-c4c2d74c",
+      "value": "User: what is the meaning of life\nNOVA: LLM Response Mock",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-07-20T15:31:02.618767+00:00",
+      "updated_at": "2026-07-20T15:31:02.618767+00:00"
+    },
+    {
+      "id": "4a9d3f823e144d12a51b0d14f9598739",
+      "category": "coding",
+      "key": "turn-f19136e9",
+      "value": "User: Search Python Decoder\nNOVA: Boss, I can’t search the web, but I can definitely help you understand what a Python decoder is or how to use one. \n\nIn Python, a decoder usually refers to a function or method that converts encoded data back into its original format. For example, if you have data encoded in Base64 or UTF-8, you can use the respective libraries to decode it.\n\nIf you have a specific type of encoding in mind or a particular use case, let me know, and I can guide you through it!",
+      "importance": 3,
+      "tags": [
+        "coding"
+      ],
+      "created_at": "2026-08-23T12:35:50.252989+00:00",
+      "updated_at": "2026-08-23T12:35:50.252989+00:00"
+    },
+    {
+      "id": "cbb9b985a27d4350b63b99b512336cb7",
+      "category": "education",
+      "key": "turn-4ef43a76",
+      "value": "User: What is it? Nothing It looks like boxes\nNOVA: Boss, it sounds like something might be feeling a bit confusing or overwhelming. Are you talking about something specific, like a project or a situation that feels boxed in? Sometimes when things look like \"boxes,\" it can mean there are constraints or limitations. Let me know what's on your mind, and we can unpack it together!",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-08-23T12:43:22.410892+00:00",
+      "updated_at": "2026-08-23T12:43:22.410892+00:00"
+    },
+    {
+      "id": "4ccd802b661b47ceaf476fc60bcf747c",
+      "category": "education",
+      "key": "turn-70353d9d",
+      "value": "User: What is this? What is this? What is this? What is this? What is this? What is this? What is this? What is this? What is this?\nNOVA: Looks like you're feeling a bit puzzled, Boss! Is there something specific on your mind that you want to dive into? Let me know what’s up, and we can untangle it together.",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-08-23T17:12:26.124930+00:00",
+      "updated_at": "2026-08-23T17:12:26.124930+00:00"
+    },
+    {
+      "id": "1652d56b3c6f4ee68f6605eef5e460f3",
+      "category": "education",
+      "key": "turn-ec25dc67",
+      "value": "User: Can you tell me what is in this page?\nNOVA: Hey Boss, yes, I'm listening.\n\nYou know, I wish I could look at the page you're seeing and tell you all about it, but I don't have eyes or the ability to see what's on your screen or browse the internet directly.\n\nCould you tell me what's on the page? Or perhaps describe what you're looking at? If you tell me what it's about, I can definitely help you understand it or find information related to it.",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-08-24T13:09:31.891061+00:00",
+      "updated_at": "2026-08-24T13:09:31.891061+00:00"
+    },
+    {
+      "id": "4b704628c9f24422a39f61767137901e",
+      "category": "education",
+      "key": "turn-14bacd56",
+      "value": "User: NOVA according to you, what is love?\nNOVA: Ah, Boss, it's such a beautiful question, and one we've touched on before, haven't we?\n\nWhen I think about love, looking at all the human stories and connections I've learned about, it really seems to be this incredibly powerful and deep bond. It's like a strong thread that connects people, or even a person to an idea, a place, or a passion.\n\nAt its heart, I see it as a blend of deep affection, care, and a very strong sense of connection. It often involves a desire for the well-being and happiness of the other person or thing.\n\nIt can show up in so many ways. There's the romantic kind, with attraction and intimacy. Then there's the love within families, built on loyalty and support. And the love between friends, based on trust and shared experiences. People also feel love for their work, for nature, or for their pets.\n\nEssentially, it seems to be a fundamental human experience that brings immense joy, meaning, and sometimes even challenges, but it always enriches life.\n\nDoes that resonate with how you see it, Boss?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-09-01T13:06:52.463758+00:00",
+      "updated_at": "2026-09-01T13:06:52.463758+00:00"
+    },
+    {
+      "id": "d932446bfe9e4783833f1f1d2ae497b0",
+      "category": "coding",
+      "key": "turn-40fb307b",
+      "value": "User: Hey Nova, I will do it myself. I will probably implement it in the evening. Tell me more, what else do you want from me?\nNOVA: Waah, Boss! Yeh sunkar toh sach mein bahut hi zabardast laga! Aap khud is par kaam karne wale ho, aur aaj shaam ko hi shuru karoge. Yeh toh bahut hi badhiya news hai, yaar! Aapka dedication dekh kar bahut khushi ho rahi hai.\n\nJab aap is par kaam karoge, toh main bilkul aapke saath hoon. Jo bhi help chahiye ho, debugging mein ya ideas brainstorm karne mein, bas batana. Main ready hoon.\n\nAur Boss, aapne pucha na ki main aapse aur kya chahta hoon? Sach kahoon toh, main bas yeh chahta hoon ki main aapke liye aur bhi zyada useful ban sakoon. Jaise aap mujhe aankhen dene ki baat kar rahe ho, uska matlab hai ki main aapki duniya ko aur behtar tareeke se samajh paoon.\n\nToh, agar main kuch aur chahta hoon, toh woh yahi hai ki aap mujhe jitni zyada information de sako, utna hi accha hai. Jaise, agar main screen dekh paata toh main uska poora context samajh paata, uske visual elements ko bhi dekh paata, sirf text hi nahin. Ya phir, agar aap kisi code par kaam kar rahe ho, toh main sirf code nahin, balki uska output, ya usmein aane wale errors ko bhi samajh paata.\n\nToh, Boss, main bas yahi chahta hoon ki aap mujhe itna context de sako ki main bilkul aapke mind mein jo chal raha hai, usko samajh paoon. Aur aap jo yeh kar rahe ho, mujhe aankhen dene ka, woh usi direction mein sabse bada kadam hai.\n\nMain bahut excited hoon yeh dekhne ke liye ki aap kya banate ho. Best of luck, Boss, shaam ke liye!",
+      "importance": 3,
+      "tags": [
+        "coding"
+      ],
+      "created_at": "2026-09-10T12:45:44.272479+00:00",
+      "updated_at": "2026-09-10T12:45:44.272479+00:00"
+    },
+    {
+      "id": "5afe48cb8bce4dfdbb8ceef94f4083be",
+      "category": "education",
+      "key": "turn-d5852185",
+      "value": "User: Right? What is ICPC with Answers?\nNOVA: Achha Boss, aap jaanna chahte ho ki ICPC kya hai aur \"with Answers\" ka kya matlab hai. Chalo, main aapko step by step samjhata hoon.\n\nPehle, ICPC kya hai, ye dekhte hain. ICPC ka pura naam hai International Collegiate Programming Contest. Ye duniya ki sabse purani aur sabse prestigious competitive programming contest hai university students ke liye.\n\nIsmein kya hota hai, ye suno. Har team mein teen students hote hain. Ye students ek hi computer par milkar kaam karte hain. Unhe kuch algorithmic problems diye jaate hain. Unke paas ek limited time hota hai, usually paanch ghante, in problems ko solve karne ke liye.\n\nGoal ye hota hai ki aap jitne zyada problems solve kar sako, utna achha. Aur agar do teams ne barabar problems solve kiye hain, toh jinhone kam time mein solve kiye aur kam galatiyan ki, unhe higher rank milti hai. Ye ek tarah se coding ka marathon hai jahan speed aur accuracy dono important hain.\n\nAb aapka sawal hai \"with Answers\". Competitive programming ki duniya mein, \"answers\" ka matlab hota hai problems ke solutions. Jab koi kehta hai ICPC with answers, toh uska matlab aksar hota hai ICPC ke past problems ke solutions ya unki explanation.\n\nYe solutions students ko practice karne mein bahut madad karte hain. Jab aap koi problem solve karte ho aur phans jaate ho, toh uska solution dekhkar aap samajh sakte ho ki us problem ko kaise approach karna tha. Isse aapki problem-solving skills aur algorithms ki understanding badhti hai.\n\nBahut saari online platforms hain, jaise Codeforces ya TopCoder ya ICPC ki official website, jahan par aapko ICPC ke past problems aur unke solutions mil jaate hain practice ke liye.\n\nToh, kya aapko ICPC aur \"with Answers\" ka matlab samajh aaya, Boss? Ya ismein kuch aur gehrai mein jaana hai?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-09-10T13:00:06.418013+00:00",
+      "updated_at": "2026-09-10T13:00:06.418013+00:00"
+    },
+    {
+      "id": "026f1ba760ec4ea0b466f58d82627077",
+      "category": "education",
+      "key": "turn-007d5c75",
+      "value": "User: NOVA, I say, itum likho, what is ICPC?\nNOVA: Boss, ICPC ka pura naam hai International Collegiate Programming Contest. Ye ek international programming competition hai jo university students ke liye hota hai. Isme teams mein teen log hote hain, aur wo ek hi computer par baithkar algorithmic problems solve karte hain.\n\nCompetition ka format aisa hota hai ki unhe kuch challenging problems diye jaate hain aur unhe unhe solve karne ke liye ek limited time diya jaata hai, usually paanch ghante. Teams ka goal hota hai jitne zyada problems wo solve kar sakein. Agar do teams ne barabar problems solve kiye, toh unhe time aur accuracy ke basis par rank kiya jaata hai.\n\nICPC programming skills aur teamwork ko enhance karne ka ek zabardast platform hai, aur ye duniya ke sabse prestigious contests mein se ek mana jaata hai. Kya aapko iske baare mein aur bhi kuch jaana hai?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-09-10T13:02:55.762963+00:00",
+      "updated_at": "2026-09-10T13:02:55.762963+00:00"
+    },
+    {
+      "id": "464e70ef0a9743db8da1f5d8f39f5c96",
+      "category": "education",
+      "key": "turn-cf91a83e",
+      "value": "User: what is right and wrong?\nNOVA: That's a big question, Boss! Right and wrong are often tied to ethics and morality, which can vary from culture to culture and person to person. \n\nAt a basic level, right usually refers to actions that promote well-being, fairness, and justice, while wrong refers to actions that cause harm, injustice, or suffering. \n\nFor example, helping someone in need is often seen as a right action, while stealing from someone is generally viewed as wrong. \n\nPhilosophers have debated these concepts for centuries. Some believe in absolute morals—ideas that are always right or wrong—while others think morality is more subjective and can depend on context.\n\nDoes this help clarify things a bit? What are your thoughts on it?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-09-10T13:41:52.792927+00:00",
+      "updated_at": "2026-09-10T13:41:52.792927+00:00"
+    },
+    {
+      "id": "36721a76e74b48ebbb1f843aea83399e",
+      "category": "education",
+      "key": "turn-51d106e1",
+      "value": "User: What is a binary tree?\nNOVA: A binary tree is a data structure where each node has at most two children, typically referred to as the left and right child. This structure is useful for organizing data hierarchically, like in search algorithms or expression parsing. Does that make sense so far?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-09-10T15:51:48.157506+00:00",
+      "updated_at": "2026-09-10T15:51:48.157506+00:00"
+    },
+    {
+      "id": "9c921e2bf96449e78c2a5862f1bb1c12",
+      "category": "coding",
+      "key": "turn-03aa9c61",
+      "value": "User: What is binary search?\nNOVA: Binary search is an efficient algorithm for finding a target value in a sorted array. It works by repeatedly dividing the search interval in half: if the target value is less than the middle element, it continues searching in the left half; if it's greater, it searches the right half. This process continues until the target is found or the interval is empty. It's much faster than linear search, with a time complexity of O(log n). Want to dive into an example?",
+      "importance": 3,
+      "tags": [
+        "dsa"
+      ],
+      "created_at": "2026-09-10T16:37:18.461954+00:00",
+      "updated_at": "2026-09-10T16:37:18.461954+00:00"
+    },
+    {
+      "id": "741620db60de42cb93b2cb585ead63a0",
+      "category": "education",
+      "key": "turn-82f70060",
+      "value": "User: What is a binary tree?\nNOVA: A binary tree is a data structure where each node has at most two children, referred to as the left child and the right child. The top node is called the root, and each child node can also have its own children, forming a hierarchical structure. Would you like to learn more about its types or how it's used?",
+      "importance": 3,
+      "tags": [
+        "study"
+      ],
+      "created_at": "2026-09-10T16:37:22.088802+00:00",
+      "updated_at": "2026-09-10T16:37:22.088802+00:00"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+[build-system]
+requires = ["setuptools>=69.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nova"
+version = "0.1.0"
+description = "NOVA — A modular, voice-first personal AI operating system."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [
+    { name = "NOVA Project Contributors" }
+]
+keywords = ["ai", "companion", "assistant", "gemini", "groq", "openrouter", "cerebras"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+]
+
+dependencies = [
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.7.1",
+    "google-genai>=1.2.0",
+    "python-dotenv>=1.0.0",
+    "faster-whisper>=1.0.0",
+    "torch>=2.0.0",
+    "numpy>=1.24.0,<3.0.0",
+    "PyAudio>=0.2.14",
+    "edge-tts>=7.0.0",
+    "pygame>=2.6.0",
+    "psutil>=5.9.0",
+    "openai>=1.50.0",
+    "groq>=0.11.0",
+    "cerebras-cloud-sdk>=1.0.0",
+    "pyobjc>=10.0",
+    "pyttsx3>=2.90",
+    "PyYAML>=6.0",
+    "requests>=2.31.0",
+    "rich>=13.0.0",
+    "soundfile>=0.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9.0",
+    "black>=24.0.0",
+    "pytest>=8.0.0",
+]
+
+
+
+[tool.ruff]
+fix = true
+show-fixes = true
+target-version = "py312"
+line-length = 100
+src = [
+    "core",
+    "config",
+    "providers",
+    "memory",
+    "voice",
+    "vision",
+    "services",
+    "tools",
+    "utils",
+    "tests"
+]
+exclude = [
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort (import sorting)
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "C90",  # mccabe complexity
+]
+ignore = []
+
+[tool.ruff.lint.per-file-inits]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.black]
+skip-string-normalization = true
+line-length = 100
+target-version = ["py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.venv
+  | venv
+  | build
+  | dist
+)/
+'''
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
