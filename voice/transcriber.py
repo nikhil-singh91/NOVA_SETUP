@@ -53,16 +53,21 @@ class BaseTranscriber(ABC):
 
 # Domain vocabulary prompt and hotwords to eliminate phonetic mishearings and bias Whisper towards assistant commands and entities
 ASSISTANT_DOMAIN_PROMPT: str = (
-    "NOVA desktop voice assistant commands: write code in notepad, write what is ICPC with answer, "
-    "play Parvati song, open Telegram, open YouTube, WhatsApp, GitHub, Flipkart, Amazon, Google, "
-    "ICPC, Parvati, play music, increase volume to 70 percent, decrease volume, brightness 80 percent, "
-    "check wifi, bluetooth, take screenshot, start screen recording, scroll down, scroll to bottom, shut down, "
-    "karo, kar do, pe, search Flipkart pe mobile phones."
+    "NOVA desktop voice assistant commands and conversational Hinglish: "
+    "Nova, open Telegram, open YouTube, WhatsApp, GitHub, Flipkart, Amazon, Google, VS Code, Terminal. "
+    "Nova write code in notepad, explain recursion, binary search, DSA, trees, graphs, python, cpp, bug fix. "
+    "Nova aaj college mein bahut thak gaya hoon, main abhi college se aaya hoon, pura din class thi. "
+    "Nova ye recursion samajh nahi aa rahi, yaar ye bug solve nahi ho raha, mujhe ye code samjha do. "
+    "Nova I was studying DSA aur ye topic samajh nahi aa raha, kal mera exam hai and mujhe kuch yaad nahi hai. "
+    "Nova volume thoda badha do, turn volume up, bluetooth off, screenshot lo, Telegram open kar do, Telegram kholo, app band karo, "
+    "mujhe batao, kya ho raha hai, play Parvati song, search Flipkart pe mobile phones, shut down."
 )
 
 ASSISTANT_HOTWORDS: str = (
-    "write, notepad, textedit, telegram, youtube, whatsapp, github, flipkart, amazon, google, "
-    "icpc, parvati, volume, brightness, wifi, bluetooth, screenshot, scroll, bubble sort, code, python, cpp"
+    "telegram, youtube, whatsapp, github, flipkart, google, vscode, terminal, "
+    "recursion, dsa, bubble sort, binary search, code, python, cpp, bug, "
+    "thak gaya, college, exam, samjha do, samajh, nahi ho raha, run nahi ho raha, "
+    "badha do, kar do, kholo, band karo, volume, brightness, wifi, bluetooth, screenshot, parvati"
 )
 
 
@@ -359,7 +364,7 @@ class GroqCloudTranscriber(BaseTranscriber):
             return TranscriptionResult(
                 text=text,
                 confidence=confidence,
-                language=language or "en",
+                language=getattr(transcription, "language", language if language and language != "auto" else "auto"),
                 duration_seconds=elapsed,
                 speech_duration=speech_duration,
                 no_speech_prob=mean_no_speech,
@@ -395,7 +400,7 @@ class TranscriptionManager:
         self,
         primary_engine: str = "faster_whisper",
         model_size: str = "base",
-        language: str = "en",
+        language: str = "auto",
     ) -> None:
         self.primary_engine = primary_engine
         self.model_size = model_size

@@ -150,7 +150,7 @@ class Settings(BaseSettings):
         alias="STT_MAX_SPEECH_DURATION_SECONDS",
     )
     stt_language: str = Field(
-        default="en",
+        default="auto",
         alias="STT_LANGUAGE",
     )
     tts_rate: str = Field(

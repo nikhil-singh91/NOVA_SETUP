@@ -49,7 +49,7 @@ class VoiceManager:
         self.transcriber = TranscriptionManager(
             primary_engine=settings.stt_engine or "faster_whisper",
             model_size=settings.whisper_model_name or "base",
-            language=settings.stt_language or "en",
+            language=settings.stt_language or "auto",
         )
         self.quality_gate = TranscriptQualityGate()
         self.speaker = SpeakerManager(
@@ -172,7 +172,13 @@ class VoiceManager:
 
         # 3. Evaluate transcript through centralized TranscriptQualityGate
         quality = self.quality_gate.evaluate(transcription)
-        if not quality.accepted and event_res.is_isolated_event and event_res.event_type in (AudioEventType.COUGH, AudioEventType.SNEEZE):
+        if not quality.accepted and event_res.is_isolated_event and event_res.event_type in (
+            AudioEventType.COUGH,
+            AudioEventType.SNEEZE,
+            AudioEventType.LAUGHTER,
+            AudioEventType.SIGH,
+            AudioEventType.THROAT_CLEAR,
+        ):
             from voice.state import QualityCheckResult, QualityDecision
             quality = QualityCheckResult(
                 accepted=True,

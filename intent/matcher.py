@@ -442,6 +442,7 @@ class LinguisticIntentMatcher:
             r"^(?:increase|raise|turn\s+up|more)\s+(?:the\s+|my\s+)?(?:mac\s+|laptop\s+|system\s+)?(?:volume|sound|audio)(?:\s+(?:of|on)\s+(?:my\s+)?(?:mac|laptop|system))?$|"
             r"^turn\s+(?:the\s+|my\s+)?(?:mac\s+|laptop\s+|system\s+)?(?:volume|sound|audio)\s+(?:up|louder|higher)(?:\s+(?:for\s+me|now))?$|"
             r"^make\s+(?:the\s+|my\s+|it\s+)?(?:volume\s+|sound\s+|audio\s+)?louder(?:\s+(?:for\s+me|now))?$|"
+            r"^(?:volume|awaaz|sound)\s+(?:thoda\s+|thodi\s+)?(?:badha\s*do|badhao|tez\s*karo|tez\s*kar\s*do|up\s*karo|up\s*kar\s*do)$|"
             r"^(?:volume\s+up|sound\s+up|audio\s+up|louder)$",
             txt,
         )
@@ -461,6 +462,7 @@ class LinguisticIntentMatcher:
             r"^(?:decrease|lower|turn\s+down|less|reduce)\s+(?:the\s+|my\s+)?(?:mac\s+|laptop\s+|system\s+)?(?:volume|sound|audio)(?:\s+(?:of|on)\s+(?:my\s+)?(?:mac|laptop|system))?$|"
             r"^turn\s+(?:the\s+|my\s+)?(?:mac\s+|laptop\s+|system\s+)?(?:volume|sound|audio)\s+(?:down|quieter|softer|lower)(?:\s+(?:for\s+me|now))?$|"
             r"^make\s+(?:the\s+|my\s+|it\s+)?(?:volume\s+|sound\s+|audio\s+)?(?:quieter|softer|lower)(?:\s+(?:for\s+me|now))?$|"
+            r"^(?:volume|awaaz|sound)\s+(?:thoda\s+|thodi\s+)?(?:kam\s*karo|kam\s*kar\s*do|ghatao|down\s*karo|down\s*kar\s*do)$|"
             r"^(?:volume\s+down|sound\s+down|audio\s+down|softer|quieter)$",
             txt,
         )
@@ -1648,6 +1650,33 @@ class LinguisticIntentMatcher:
                         normalized_input=norm_text,
                     )
 
+        # 4. Hinglish app launch patterns: "Telegram open kar do", "Telegram open karo", "Telegram kholo"
+        m_hinglish = re.search(r"^(.+?)\s+(?:open\s+kar\s+do|open\s+karo|kholo)$", txt)
+        if m_hinglish:
+            candidate = m_hinglish.group(1).strip()
+            candidate = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", candidate).strip()
+            clean_cand = candidate.lower()
+            if not any(k in clean_cand for k in ["website", "site", "webpage", "folder", "tab", "camera", "photo", "recording"]):
+                if clean_cand in AppLauncher.ALIAS_MAP and clean_cand not in ("youtube", "flipkart", "aktu", "amazon"):
+                    canonical = AppLauncher.ALIAS_MAP[clean_cand]
+                    return StructuredAction(
+                        intent=CanonicalIntent.LAUNCH_APP,
+                        confidence=0.98,
+                        parameters={"app_name": canonical, "raw_alias": candidate, "explicit_app": False},
+                        raw_input=raw,
+                        normalized_input=norm_text,
+                    )
+                installed = AppLauncher.find_installed_app(candidate)
+                if installed and clean_cand not in ("youtube", "flipkart", "aktu", "amazon", "github", "google"):
+                    canonical = AppLauncher.resolve_app_name(candidate)
+                    return StructuredAction(
+                        intent=CanonicalIntent.LAUNCH_APP,
+                        confidence=0.98,
+                        parameters={"app_name": canonical, "raw_alias": candidate, "explicit_app": False},
+                        raw_input=raw,
+                        normalized_input=norm_text,
+                    )
+
         return None
 
     def _match_app_close(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
@@ -1667,6 +1696,22 @@ class LinguisticIntentMatcher:
                     raw_input=raw,
                     normalized_input=norm_text,
                 )
+
+        # Hinglish close: "Telegram band kar do", "Telegram band karo", "Telegram close kar do"
+        m_close_h = re.search(r"^(.+?)\s+(?:band\s+kar\s+do|band\s+karo|close\s+kar\s+do|close\s+karo)$", txt)
+        if m_close_h:
+            app_raw = m_close_h.group(1).strip()
+            app_raw = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", app_raw).strip()
+            if app_raw and app_raw not in ("tab", "tabs", "new tab", "window", "browser", "this", "it", "screen", "recording"):
+                canonical = AppLauncher.resolve_app_name(app_raw)
+                return StructuredAction(
+                    intent=CanonicalIntent.CLOSE_APP,
+                    confidence=0.98,
+                    parameters={"app_name": canonical, "raw_alias": app_raw},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
         return None
 
     def _match_search_and_research(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
