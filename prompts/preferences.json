@@ -3,7 +3,7 @@
   "user_title": "Boss",
   "response_length": "medium",
   "humor_level": "light",
-  "emoji_usage": false,
+  "emoji_usage": true,
   "verbosity": "normal",
   "coding_language": "python",
   "formality": "balanced",

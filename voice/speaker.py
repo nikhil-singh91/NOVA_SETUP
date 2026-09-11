@@ -22,16 +22,31 @@ logger = get_logger(__name__)
 from core.response_cleaner import clean_model_response
 
 
+_EMOJI_AND_SYMBOL_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?:"
+    r"[\U00010000-\U0010ffff]"  # Supplementary Multilingual Planes (emojis, pictographs, symbols)
+    r"|[\u2600-\u27bf]"          # Misc symbols & Dingbats (❤️, ☀️, ⚡, ❄️, ☕, ❌, etc.)
+    r"|[\u2300-\u23ff]"          # Misc technical (⌚, ⌛, ⌨️, etc.)
+    r"|[\u2b00-\u2bff]"          # Misc symbols and arrows (⭐, ⭕, etc.)
+    r"|[\u25a0-\u25ff]"          # Geometric shapes
+    r"|[\u2190-\u21ff]"          # Arrows
+    r"|[\u20d0-\u20ff]"          # Combining diacritical marks for symbols
+    r"|[\ufe00-\ufe0f]"          # Variation selectors (\ufe0f emoji presentation)
+    r"|[\u200d]"                 # Zero-width joiner
+    r")+"
+)
+
+
 def clean_text_for_speech(text: str) -> str:
     """Sanitize text before speech synthesis.
 
     Removes code blocks, markdown symbols, URLs, asterisks, emojis, and extraneous punctuation.
+    Leaves normal speech punctuation intact while ensuring emojis are omitted or replaced with a natural pause.
     """
     if not text:
         return ""
 
     cleaned = clean_model_response(text, default_fallback="")
-
 
     # 1. Remove markdown code blocks
     cleaned = re.sub(r"```[\s\S]*?```", " [code snippet omitted] ", cleaned)
@@ -45,12 +60,29 @@ def clean_text_for_speech(text: str) -> str:
     cleaned = re.sub(r"#+", "", cleaned)
     # 6. Remove markdown bold/italic asterisks and underscores
     cleaned = re.sub(r"[*_~]{1,3}", "", cleaned)
-    # 7. Remove emojis & miscellaneous symbols
-    cleaned = re.sub(r"[\U00010000-\U0010ffff]|\u2600-\u27bf", "", cleaned)
-    # 8. Collapse multiple whitespace
+
+    # 7. Remove emojis & non-speech symbols:
+    # If an emoji sits between two words without surrounding punctuation (e.g. "Yesss 😂 finally!"),
+    # replace it with a gentle pause comma (", ") to maintain natural speech cadence.
+    # Otherwise, omit it cleanly.
+    def _emoji_sub(match: re.Match[str]) -> str:
+        start = match.start()
+        end = match.end()
+        pre = cleaned[:start].rstrip()
+        post = cleaned[end:].lstrip()
+        if pre and pre[-1] not in ",.!?—:;(-" and post and post[0] not in ",.!?—:;)":
+            return ", "
+        return " "
+
+    cleaned = _EMOJI_AND_SYMBOL_PATTERN.sub(_emoji_sub, cleaned)
+
+    # 8. Clean up whitespace and redundant punctuation
+    cleaned = re.sub(r"\s+([,!?.:;])", r"\1", cleaned)
+    cleaned = re.sub(r",+", ",", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
     return cleaned
+
 
 
 class SpeakerManager:

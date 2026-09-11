@@ -734,7 +734,7 @@ class LinguisticIntentMatcher:
                 )
             # Explicit status check
             if (
-                any(k in txt for k in ["status", "check", "state", "tell me my wifi", "what's my wifi", "whats my wifi"])
+                any(k in txt or k in raw.lower() for k in ["status", "check", "state", "tell me my wifi", "what's my wifi", "whats my wifi"])
                 or re.search(r"\b(?:is\s+(?:the\s+|my\s+)?wi-?fi\s+(?:on|connected|working)|wi-?fi\s+(?:state|status|check|on\s+or\s+off))\b", txt)
                 or re.search(r"\bwi-?fi\b.*\b(?:on\s+or\s+off|turned\s+on)\b", txt)
                 or re.search(r"\bis\s+(?:my\s+|the\s+)?wi-?fi\s+on\b", txt)
