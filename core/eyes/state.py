@@ -78,6 +78,56 @@ class ScreenState:
                 matches.append(elem)
         return matches
 
+    def get_natural_screen_description(self, is_hinglish: bool = False) -> str:
+        """Produce a natural, human-friendly conversational description of the current screen."""
+        app = (self.active_application or "Desktop").strip()
+        win = (self.active_window or "").strip()
+
+        # 1. Error state takes priority if present
+        if self.errors:
+            err = self.errors[0]
+            if len(err) > 100:
+                err = err[:97] + "..."
+            if is_hinglish:
+                return f"Screen par ek error message dikh raha hai: '{err}'."
+            return f"There's an error on your screen: '{err}'."
+
+        app_lower = app.lower()
+        win_lower = win.lower()
+
+        # 2. Browser detection
+        if any(b in app_lower for b in ("chrome", "safari", "brave", "edge", "firefox", "browser")):
+            if "youtube" in win_lower or any("youtube" in t.lower() for t in self.visible_texts[:5]):
+                if "/shorts" in win_lower or "shorts" in win_lower:
+                    return "Aap abhi YouTube Shorts dekh rahe ho." if is_hinglish else "You're on YouTube Shorts right now."
+                # Extract probable video title from visible text
+                title_candidates = [
+                    t for t in self.visible_texts
+                    if len(t) > 10 and not any(k in t.lower() for k in ("youtube", "subscribers", "views", "share", "save", "download", "home", "explore", "subscribe", "notification"))
+                ]
+                if title_candidates:
+                    vid_title = title_candidates[0]
+                    return f"Aap abhi YouTube par '{vid_title}' dekh rahe ho." if is_hinglish else f"You're on YouTube right now, looking at '{vid_title}'."
+                clean_win = win.replace(" - YouTube", "").strip()
+                return f"Aap abhi YouTube par '{clean_win}' par ho." if is_hinglish else f"You're on YouTube right now looking at '{clean_win}'."
+            
+            clean_win = win.split(" - ")[0].strip() if " - " in win else win
+            return f"Aap browser mein '{clean_win}' dekh rahe ho." if is_hinglish else f"You're in your browser looking at '{clean_win}'."
+
+        # 3. Code Editor / Terminal detection
+        if any(ide in app_lower for ide in ("code", "cursor", "sublime", "pycharm", "intellij", "terminal", "iterm", "xcode")):
+            clean_win = win.split(" — ")[0].split(" - ")[0].strip() if win else app
+            return f"Aap {app} mein ho, aur '{clean_win}' open hai." if is_hinglish else f"You're in {app}, and I can see your workspace open with '{clean_win}'."
+
+        # 4. Finder / Files detection
+        if "finder" in app_lower:
+            return f"Aap Finder mein '{win}' folder dekh rahe ho." if is_hinglish else f"You're in Finder looking at the '{win}' folder."
+
+        # 5. General window description
+        if win and win.lower() != app_lower:
+            return f"Aap abhi {app} mein '{win}' dekh rahe ho." if is_hinglish else f"You're currently in {app}, looking at '{win}'."
+        return f"Aap abhi {app} dekh rahe ho." if is_hinglish else f"You're currently looking at {app}."
+
     def get_summary(self) -> str:
         """Compact conversational description of the current screen for AI context."""
         app_str = self.active_application or "Unknown App"

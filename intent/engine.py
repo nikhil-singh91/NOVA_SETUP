@@ -170,6 +170,10 @@ class NaturalLanguageIntentEngine:
             "dim", "brighter", "dimmer", "darker", "record", "screenshot", "capture",
             "wifi", "bluetooth", "clipboard", "type", "click", "write", "create",
             "delete", "lock", "camera", "photo", "restart",
+            "bhajao", "bajao", "baja", "bajana", "chala", "chalao", "chalu", "sunao",
+            "lagao", "kholo", "dikhao", "padho", "samjhao", "band", "song", "songs",
+            "gaana", "gaane", "music", "shorts", "short", "screen", "display",
+            "dekh", "dekho", "video", "videos",
         ]
         has_action_keyword = any(k in norm.cleaned_lower for k in action_indicators)
 

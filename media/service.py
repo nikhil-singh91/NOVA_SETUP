@@ -119,7 +119,8 @@ class MediaPlaybackService:
             candidates.sort(key=lambda x: x.score, reverse=True)
 
         selected: VideoCandidate | None = None
-        if candidates and candidates[0].score >= 0.35:
+        # Confident threshold: require score >= 0.50 to avoid playing unrelated results
+        if candidates and candidates[0].score >= 0.50:
             selected = candidates[0]
             self.last_candidate = selected
 

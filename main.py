@@ -826,17 +826,16 @@ class NovaApplication:
                     return
 
                 if structured_action.intent == CanonicalIntent.WHAT_AM_I_LOOKING_AT:
-                    app = ctx.active_application or "an application"
-                    if ctx.current_url:
-                        reply = f"You are currently viewing {ctx.current_page_title or ctx.current_domain or 'a webpage'} in {app}."
-                    elif ctx.current_folder:
-                        reply = f"You are currently looking at the {ctx.current_folder.name} folder in {app}."
-                    elif ctx.active_window:
-                        reply = f"You are looking at {ctx.active_window} in {app}."
-                    else:
-                        res = self.computer_agent.explain_screen_content()
-                        reply = res.spoken_response
-                    self._deliver_response(reply, turn_id)
+                    DashboardStatsManager.record_understood("Screen Awareness")
+                    DashboardStatsManager.record_action("Observing screen with NOVA Eyes")
+                    from personality.response_orchestrator import ResponseOrchestrator
+                    is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
+                    res = self.computer_agent.explain_screen_content(is_hinglish=is_hi, env_context=ctx)
+                    orch = ResponseOrchestrator.format_action_response(
+                        structured_action, res, user_text, screen_desc=res.spoken_response
+                    )
+                    DashboardStatsManager.record_result("✓ Screen observed" if res.success else "✗ Eyes unavailable", success=res.success)
+                    self._deliver_orchestrated_response(orch, turn_id)
                     return
 
             # 3D. Autonomous Multi-Step Task Agent Dispatch
@@ -875,6 +874,38 @@ class NovaApplication:
                 prompt = structured_action.clarification_prompt or f"Do you want me to remind you at {time_str}?"
                 self._deliver_response(prompt, turn_id)
                 return
+            # 3G. Dedicated Media & YouTube Shorts Dispatch (First-Class Action Intents)
+            if structured_action.intent == CanonicalIntent.PLAY_MEDIA:
+                DashboardStatsManager.record_understood("Play Media", details=structured_action.parameters)
+                query = structured_action.parameters.get("query", "")
+                DashboardStatsManager.record_action(f"Playing '{query}' on YouTube")
+                from intent.router import structured_action_to_browser_plan
+                plan = structured_action_to_browser_plan(structured_action)
+                if plan:
+                    res = self.browser_manager.execute_plan(plan)
+                else:
+                    res = self.browser_manager.execute_command(user_text)
+                from personality.response_orchestrator import ResponseOrchestrator
+                orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
+                DashboardStatsManager.record_result(f"✓ {res.message}" if res and res.success else "✗ Playback unconfirmed", success=bool(res and res.success))
+                self._deliver_orchestrated_response(orch, turn_id)
+                return
+
+            if structured_action.intent == CanonicalIntent.WATCH_SHORTS:
+                DashboardStatsManager.record_understood("Watch Shorts", details=structured_action.parameters)
+                DashboardStatsManager.record_action("Opening YouTube Shorts")
+                from intent.router import structured_action_to_browser_plan
+                plan = structured_action_to_browser_plan(structured_action)
+                if plan:
+                    res = self.browser_manager.execute_plan(plan)
+                else:
+                    res = self.browser_manager.execute_command(user_text)
+                from personality.response_orchestrator import ResponseOrchestrator
+                orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
+                DashboardStatsManager.record_result("✓ YouTube Shorts opened" if res and res.success else "✗ Failed to open Shorts", success=bool(res and res.success))
+                self._deliver_orchestrated_response(orch, turn_id)
+                return
+
             # 4. Domain-Aware Subsystem Dispatch
             if routing_domain == RoutingDomain.BROWSER:
                 browser_result = self.browser_manager.execute_command(norm_text) or self.browser_manager.execute_command(user_text)
@@ -1278,6 +1309,17 @@ class NovaApplication:
 
             self.event_bus.publish(NovaEvent.THINKING_STARTED, text=user_text)
 
+            screen_summary = None
+            try:
+                if hasattr(self, "computer_agent") and self.computer_agent and self.computer_agent.eyes:
+                    st = self.computer_agent.eyes.get_latest_state()
+                    if st:
+                        from personality.response_orchestrator import ResponseOrchestrator
+                        is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
+                        screen_summary = st.get_natural_screen_description(is_hinglish=is_hi)
+            except Exception:
+                pass
+
             context = PromptBuildContext(
                 memory_summary=memory_summary,
                 current_project=self.activity.current_project,
@@ -1286,6 +1328,7 @@ class NovaApplication:
                 current_provider=active_provider,
                 voice_mode=(request.source == "voice"),
                 audio_event=request.audio_event,
+                screen_summary=screen_summary,
             )
 
             DashboardStatsManager.update("active_provider", active_provider or "Gemini")
@@ -1394,17 +1437,22 @@ class NovaApplication:
             self._deliver_response("I'm having trouble reaching my AI engines right now, Boss.", turn_id)
             return None
 
-    def _deliver_response(self, text: str, turn_id: str) -> None:
-        """Deliver response text through console and speech."""
-        from core.response_cleaner import clean_model_response
-        clean_text = clean_model_response(text)
-        DashboardStatsManager.record_nova(clean_text)
+    def _deliver_orchestrated_response(self, orch: Any, turn_id: str) -> None:
+        """Deliver orchestrated response: rich display text to Dashboard/Console, clean speech to TTS."""
+        self._deliver_response(orch.display_text, turn_id)
 
-        print(f"NOVA: {clean_text}")
+    def _deliver_response(self, text: str, turn_id: str) -> None:
+        """Deliver response text through console and speech, cleaned and TTS-sanitized."""
+        from personality.response_orchestrator import ResponseOrchestrator
+        clean_disp = ResponseOrchestrator.clean_for_display(text)
+        clean_spk = ResponseOrchestrator.clean_for_speech(clean_disp)
+        DashboardStatsManager.record_nova(clean_disp)
+
+        print(f"NOVA: {clean_disp}")
 
         # Speak via Voice V2
         if self.voice_available:
-            self.voice_manager.speak(clean_text)
+            self.voice_manager.speak(clean_spk)
 
     def _peek_active_provider(self, task_type: TaskType) -> str | None:
         if self.provider_manager is None:

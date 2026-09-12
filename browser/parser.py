@@ -386,14 +386,16 @@ class BrowserIntentParser:
                     raw_prompt=raw,
                 )
 
-        # Hindi / Hinglish: "[query] gaana chalao", "[query] play karo"
+        # Hindi / Hinglish: "[query] gaana chalao", "[query] bhajao", "[query] bajao", "[query] chala do"
         hi_match = re.search(
-            r"^(.+?)\s+(?:gaana\s+chalao|song\s+play\s+karo|play\s+karo|youtube\s+par\s+chalao|chalao)$",
+            r"^(.+?)\s+(?:gaana\s+|song\s+|songs\s+)?(?:bhajao|bajao|baja\s+do|chala\s+do|chalao|song\s+play\s+karo|play\s+karo|youtube\s+par\s+chalao|chalao)$",
             lower,
         )
         if hi_match:
             query = hi_match.group(1).strip()
-            if query and len(query) > 1 and query not in ("shorts",):
+            query = re.sub(r"^(?:nova\s*[,:]*\s*)", "", query, flags=re.I).strip()
+            query = re.sub(r"\s+(?:ke|ka|wala|wali|song|songs|gaana)$", "", query, flags=re.I).strip()
+            if query and len(query) > 1 and query.lower() not in ("shorts", "youtube shorts", "search", "youtube search"):
                 return BrowserActionPlan(
                     action_type=ActionType.PLAY_MEDIA,
                     platform=Platform.YOUTUBE,

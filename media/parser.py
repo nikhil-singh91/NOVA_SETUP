@@ -35,23 +35,68 @@ class MediaRequestParser:
         "4k",
     ]
 
+    NON_MEDIA_QUERIES = frozenset({
+        "youtube search",
+        "youtube shorts",
+        "shorts",
+        "search",
+        "youtube",
+        "video",
+        "song",
+        "songs",
+        "music",
+        "audio",
+        "google",
+    })
+
     @classmethod
     def parse(cls, text: str) -> MediaRequest:
         """Parse raw text or normalized query into a structured MediaRequest."""
         raw = text.strip()
         working = raw
-        lower = working.lower()
 
-        # 1. Detect and strip command prefixes (e.g. "play song", "watch", "i want to watch")
+        # 0. Strip wake-word prefix
         working = re.sub(
-            r"^(?:nova\s*[,:]*\s*)?(?:can\s+you\s+please\s+|please\s+)?(?:play|watch|i\s+want\s+to\s+watch|show\s+me)\s+(?:the\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?",
+            r"^(?:hey\s+|ok\s+|okay\s+)?nova\s*[,:]*\s*",
+            "",
+            working,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        # 1. Detect and strip command prefixes (English + Hindi/Hinglish)
+        working = re.sub(
+            r"^(?:can\s+you\s+please\s+|please\s+)?(?:play|watch|listen\s+to|i\s+want\s+to\s+(?:watch|listen\s+to|hear)|show\s+me)\s+(?:the\s+|an?\s+)?(?:song\s+by\s+|track\s+by\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?",
+            "",
+            working,
+            flags=re.IGNORECASE,
+        ).strip()
+        working = re.sub(
+            r"^(?:baja\s+do|bajao|bhajao|chala\s+do|chalao|chalu\s+karo|chalu\s+kar\s+do|sunao|suna\s+do|lagao|laga\s+do)\s+(?:koi\s+)?(?:accha\s+sa\s+|ek\s+)?(?:gaana|song|songs|music|track)?\s*",
+            "",
+            working,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        # Strip platform prefix/postfix
+        working = re.sub(
+            r"^(?:youtube\s+(?:pe|par|me|mein)|on\s+youtube)\s+",
             "",
             working,
             flags=re.IGNORECASE,
         ).strip()
         working = re.sub(r"\s+on\s+youtube\s*$", "", working, flags=re.IGNORECASE).strip()
+
+        # Strip Hindi/Hinglish command postfixes
         working = re.sub(
-            r"\s+(?:gaana\s+chalao|song\s+play\s+karo|play\s+karo|youtube\s+par\s+chalao|chalao)\s*$",
+            r"\s+(?:ke\s+|ka\s+|wala\s+|wali\s+)?(?:gaana|gaane|geet|song|songs|music|track)?\s*(?:bhajao|bajao|baja\s+do|baja\s+dijiye|bajana|chala\s+do|chalao|chalu\s+karo|chalu\s+kar\s+do|sunao|suna\s+do|lagao|laga\s+do|play\s+karo)\s*$",
+            "",
+            working,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        # Clean trailing auxiliary particles
+        working = re.sub(
+            r"\s+(?:ke|ka|wala|wali|song|songs|gaana)\s*$",
             "",
             working,
             flags=re.IGNORECASE,
@@ -65,12 +110,12 @@ class MediaRequestParser:
                 found_modifiers.append(mod)
 
         # 3. Detect Media Type
-        media_type = MediaType.SONG  # Default for "Play [Name]" queries
+        media_type = MediaType.SONG  # Default for media playback
         episode_number = None
         season_number = None
         series_name = None
 
-        # Check Episode patterns (e.g. "Motu Patlu episode 1", "episode 5", "season 1 episode 2")
+        # Check Episode patterns
         m_ep = re.search(
             r"^(.+?)\s+(?:season\s+(\d+)\s+)?(?:episode|ep)\s+(\d+)",
             working,
@@ -83,7 +128,7 @@ class MediaRequestParser:
                 season_number = int(m_ep.group(2))
             episode_number = int(m_ep.group(3))
         elif any(
-            k in lower
+            k in lower_working
             for k in [
                 "tutorial",
                 "guide",
@@ -98,40 +143,18 @@ class MediaRequestParser:
             ]
         ):
             media_type = MediaType.TUTORIAL
-        elif any(k in lower for k in ["shorts", "short"]):
+        elif any(k in lower_working for k in ["shorts", "short"]):
             media_type = MediaType.SHORT
-        elif any(k in lower for k in ["cartoon", "show", "anime", "series"]):
+        elif any(k in lower_working for k in ["cartoon", "show", "anime", "series"]):
             media_type = MediaType.SHOW
-        elif any(
-            k in lower
-            for k in [
-                "song",
-                "gaana",
-                "track",
-                "music",
-                "geet",
-                "sing",
-                "singer",
-                "album",
-                "kesariya",
-                "mere liye",
-                "believer",
-            ]
-        ) or any(
-            m in found_modifiers
-            for m in [
-                "lyrics",
-                "remix",
-                "acoustic",
-                "karaoke",
-                "unplugged",
-                "official",
-                "original",
-            ]
-        ):
+        else:
             media_type = MediaType.SONG
 
         clean_query = working.strip()
+
+        # Disallow non-media queries from pretending to be song queries
+        if clean_query.lower() in cls.NON_MEDIA_QUERIES:
+            clean_query = ""
 
         return MediaRequest(
             original_text=raw,
@@ -142,5 +165,5 @@ class MediaRequestParser:
             season_number=season_number,
             modifiers=found_modifiers,
             requested_platform="youtube",
-            confidence=1.0,
+            confidence=1.0 if clean_query else 0.0,
         )

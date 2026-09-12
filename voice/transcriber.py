@@ -60,14 +60,14 @@ ASSISTANT_DOMAIN_PROMPT: str = (
     "Nova ye recursion samajh nahi aa rahi, yaar ye bug solve nahi ho raha, mujhe ye code samjha do. "
     "Nova I was studying DSA aur ye topic samajh nahi aa raha, kal mera exam hai and mujhe kuch yaad nahi hai. "
     "Nova volume thoda badha do, turn volume up, bluetooth off, screenshot lo, Telegram open kar do, Telegram kholo, app band karo, "
-    "mujhe batao, kya ho raha hai, play Parvati song, search Flipkart pe mobile phones, shut down."
+    "mujhe batao, kya ho raha hai, songs bhajao, gaana chalao, play song, play shorts, open youtube shorts, what are you seeing on my screen, screen pe kya hai, search Flipkart pe mobile phones, shut down."
 )
 
 ASSISTANT_HOTWORDS: str = (
     "telegram, youtube, whatsapp, github, flipkart, google, vscode, terminal, "
     "recursion, dsa, bubble sort, binary search, code, python, cpp, bug, "
     "thak gaya, college, exam, samjha do, samajh, nahi ho raha, run nahi ho raha, "
-    "badha do, kar do, kholo, band karo, volume, brightness, wifi, bluetooth, screenshot, parvati"
+    "badha do, kar do, kholo, band karo, bhajao, bajao, chala do, gaana, songs, shorts, screen, volume, brightness, wifi, bluetooth, screenshot"
 )
 
 

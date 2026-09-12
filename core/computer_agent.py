@@ -557,23 +557,50 @@ class ComputerAgent:
             verified=True,
         )
 
-    def explain_screen_content(self) -> VisualResult:
-        """Provide a visual summary of what is on screen."""
+    def explain_screen_content(self, is_hinglish: bool = False, env_context: Any = None) -> VisualResult:
+        """Provide a natural visual summary of what is on screen using real NOVA Eyes perception."""
         self.reset_cancellation()
-        state = self.eyes.observe_now(force_ocr=True)
+        try:
+            state = self.eyes.observe_now(force_ocr=True)
+            if not state or (not state.active_application and not state.elements and not state.visible_texts):
+                msg = "Screen abhi access nahi ho pa rahi — Eyes available nahi hai." if is_hinglish else "I can't see the screen right now — Eyes isn't available."
+                return VisualResult(
+                    success=False,
+                    action_type=VisualActionType.EXPLAIN_SCREEN,
+                    message=msg,
+                    spoken_response=msg,
+                    verified=False,
+                )
 
-        desc = state.get_summary()
-        if state.visible_texts:
-            sample = ", ".join(f"'{t}'" for t in state.visible_texts[:5])
-            desc += f" Visible text includes: {sample}."
+            if env_context and getattr(env_context, "current_url", None):
+                app_name = getattr(env_context, "active_application", None) or state.active_application or "your browser"
+                page_title = getattr(env_context, "current_page_title", None) or getattr(env_context, "current_domain", None) or "a webpage"
+                desc = f"Aap {app_name} mein '{page_title}' dekh rahe ho." if is_hinglish else f"You are currently viewing {page_title} in {app_name}."
+            elif env_context and getattr(env_context, "current_folder", None):
+                folder_name = env_context.current_folder.name
+                app_name = getattr(env_context, "active_application", None) or "Finder"
+                desc = f"Aap Finder mein '{folder_name}' folder dekh rahe ho." if is_hinglish else f"You are currently looking at the {folder_name} folder in {app_name}."
+            else:
+                desc = state.get_natural_screen_description(is_hinglish=is_hinglish)
 
-        return VisualResult(
-            success=True,
-            action_type=VisualActionType.EXPLAIN_SCREEN,
-            message=desc,
-            spoken_response=desc,
-            verified=True,
-        )
+            return VisualResult(
+                success=True,
+                action_type=VisualActionType.EXPLAIN_SCREEN,
+                message=desc,
+                spoken_response=desc,
+                verified=True,
+                metadata={"app": state.active_application, "window": state.active_window},
+            )
+        except Exception as exc:
+            logger.error("NOVA Eyes screen observation error: %s", exc)
+            msg = "Screen abhi access nahi ho pa rahi — Eyes available nahi hai." if is_hinglish else "I can't see the screen right now — Eyes isn't available."
+            return VisualResult(
+                success=False,
+                action_type=VisualActionType.EXPLAIN_SCREEN,
+                message=msg,
+                spoken_response=msg,
+                verified=False,
+            )
 
 
 # Global singleton ComputerAgent

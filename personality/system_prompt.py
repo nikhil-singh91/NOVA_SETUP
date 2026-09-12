@@ -305,6 +305,7 @@ class PromptBuildContext:
     current_provider: str | None = None
     voice_mode: bool = False
     audio_event: str | None = None
+    screen_summary: str | None = None
 
 
 @dataclass
@@ -629,6 +630,12 @@ def _render_personality_section(
             f"An acoustic non-speech audio event was detected during this utterance: [{context.audio_event}]. "
             "If contextually natural, acknowledge it with brief, warm concern or reaction (e.g. if cough: 'You okay? That cough sounded rough', "
             "if laughter: match the chuckle, if sigh: acknowledge the frustration), without diagnosing medical conditions or overreacting."
+        )
+
+    if context.screen_summary:
+        lines.append(
+            f"Real-time screen perception from NOVA Eyes: {context.screen_summary}. "
+            "When the user asks what is on screen, what you see, or asks you to read or explain the page, speak from this perception naturally as their companion. Never claim you cannot see when Eyes perception is provided."
         )
 
     return "\n".join(lines)

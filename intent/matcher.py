@@ -109,6 +109,16 @@ class LinguisticIntentMatcher:
         if res:
             return res
 
+        # 6A. YouTube Shorts ("Play Shorts", "Open YouTube Shorts", "Show me YouTube Shorts")
+        res = self._match_shorts_commands(txt, raw, clean_text)
+        if res:
+            return res
+
+        # 6B. Media Playback & YouTube ("Play song <track>", "I want to watch <show>", "<query> bhajao")
+        res = self._match_media_playback(txt, raw, clean_text)
+        if res:
+            return res
+
         # 6. Folder & File Operations ("Create a folder on Desktop", "Open DSA folder", "Create main.cpp inside it")
         res = self._match_folder_and_file_commands(txt, raw, clean_text)
         if res:
@@ -116,11 +126,6 @@ class LinguisticIntentMatcher:
 
         # 7. Reminder & Scheduling Intent ("I want to go to the market at 8 PM")
         res = self._match_reminder_intent(txt, raw, clean_text)
-        if res:
-            return res
-
-        # 8. YouTube Shorts ("Play Shorts", "Open YouTube Shorts", "Show me YouTube Shorts")
-        res = self._match_shorts_commands(txt, raw, clean_text)
         if res:
             return res
 
@@ -146,11 +151,6 @@ class LinguisticIntentMatcher:
 
         # 13. Ordinal Result Selection ("Open the second one")
         res = self._match_ordinal_selection(txt, raw, clean_text)
-        if res:
-            return res
-
-        # 14. Media Playback & YouTube ("Play song Mere Liye", "I want to watch Motu Patlu")
-        res = self._match_media_playback(txt, raw, clean_text)
         if res:
             return res
 
@@ -881,8 +881,8 @@ class LinguisticIntentMatcher:
 
     def _match_screen_awareness(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
         patterns = [
-            r"^(?:what\s+(?:am\s+i|are\s+we)\s+looking\s+at|what\s+is\s+on\s+(?:my\s+)?screen|explain\s+(?:my\s+)?screen|what\'?s\s+on\s+(?:my\s+)?screen)$",
-            r"^(?:screen\s+pe\s+kya\s+hai|kya\s+chal\s+raha\s+hai|yeh\s+kya\s+hai)$",
+            r"^(?:what\s+(?:am\s+i|are\s+we|are\s+you|can\s+you)\s+(?:looking\s+at|seeing|seeing\s+on\s+(?:my\s+)?screen|see\s+on\s+(?:my\s+)?screen|see)|what\s+is\s+on\s+(?:my\s+)?screen|what\'?s\s+on\s+(?:my\s+)?screen|what\s+do\s+you\s+see(?:\s+on\s+(?:my\s+)?screen)?|what\s+can\s+you\s+see(?:\s+on\s+(?:my\s+)?screen)?|explain\s+(?:my\s+)?screen|read\s+(?:this|my\s+screen|what\'?s\s+(?:on\s+my\s+screen|written\s+here))|summarize\s+(?:this(?:\s+page)?|my\s+screen)|what(?:\'s|\s+is)\s+written\s+here|what\'?s\s+this|what\s+is\s+this)$",
+            r"^(?:screen\s+pe\s+kya\s+hai|screen\s+pe\s+kya\s+dikh\s+raha\s+hai|kya\s+dekh\s+rahe\s+ho|tum\s+kya\s+dekh\s+rahe\s+ho|screen\s+dekho|yeh\s+kya\s+hai|kya\s+chal\s+raha\s+hai|screen\s+read\s+karo|yeh\s+padho|kya\s+likha\s+hai(?:\s+yahan)?)$",
         ]
         for pat in patterns:
             if re.search(pat, txt):
@@ -1318,7 +1318,13 @@ class LinguisticIntentMatcher:
         return None
 
     def _match_shorts_commands(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
-        if txt in ["play shorts", "open shorts", "show me shorts", "open youtube shorts", "show me youtube shorts", "play youtube shorts", "shorts"]:
+        txt_clean = txt.strip().lower()
+        if txt_clean in [
+            "play shorts", "open shorts", "show me shorts", "open youtube shorts",
+            "show me youtube shorts", "play youtube shorts", "watch shorts",
+            "watch youtube shorts", "shorts", "youtube shorts", "shorts kholo",
+            "shorts dikhao", "shorts chalao", "shorts play karo",
+        ]:
             return StructuredAction(
                 intent=CanonicalIntent.WATCH_SHORTS,
                 confidence=0.98,
@@ -1327,9 +1333,30 @@ class LinguisticIntentMatcher:
                 normalized_input=norm_text,
             )
 
-        m_funny = re.search(r"^(?:play|show|watch|open)\s+(.+?)\s+shorts$", txt)
+        if any(k in txt_clean for k in ["auto shorts", "auto scroll shorts", "automatically"]) and "short" in txt_clean:
+            return StructuredAction(
+                intent=CanonicalIntent.WATCH_SHORTS,
+                confidence=0.98,
+                parameters={"platform": "youtube", "query": "", "auto_scroll": True},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        m_funny = re.search(r"^(?:play|show\s+me|show|watch|open)\s+(.+?)\s+shorts$", txt_clean)
         if m_funny:
             q = m_funny.group(1).strip()
+            if q not in ("youtube", "the", "me"):
+                return StructuredAction(
+                    intent=CanonicalIntent.WATCH_SHORTS,
+                    confidence=0.95,
+                    parameters={"platform": "youtube", "query": q},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        m_hi = re.search(r"^(.+?)\s+shorts\s+(?:dikhao|chalao|kholo|play\s+karo)$", txt_clean)
+        if m_hi:
+            q = m_hi.group(1).strip()
             if q not in ("youtube", "the", "me"):
                 return StructuredAction(
                     intent=CanonicalIntent.WATCH_SHORTS,
@@ -1538,6 +1565,20 @@ class LinguisticIntentMatcher:
         return None
 
     def _match_media_playback(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
+        # Generic music requests: "play a song", "play some music", "play music", "music chalao"
+        if txt in [
+            "play a song", "play song", "play some song", "play some songs",
+            "play music", "play some music", "music chalao", "gaana bajao",
+            "gaana chalao", "songs bhajao", "song bajao", "play songs",
+        ]:
+            return StructuredAction(
+                intent=CanonicalIntent.PLAY_MEDIA,
+                confidence=0.98,
+                parameters={"platform": "youtube", "query": "Trending Music"},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
         # Conversational check guard: "listen to me", "can you listen to me", "can you hear me", "are you listening"
         if re.search(r"^(?:can\s+you\s+)?(?:listen\s+to\s+me|hear\s+me|are\s+you\s+listening)\b", txt, re.IGNORECASE) or txt in ("listen to me", "listen"):
             return None
@@ -1546,13 +1587,18 @@ class LinguisticIntentMatcher:
         if re.search(r"\b(?:listened|heard|was\s+listening)\b", txt, re.IGNORECASE):
             return None
 
+        # Exclude pure shorts commands
+        if txt in ["play shorts", "open shorts", "show me shorts", "play youtube shorts", "youtube shorts", "shorts"]:
+            return None
+
         non_media_queries = frozenset({
             "me", "us", "him", "her", "them", "someone", "people", "myself",
             "what i say", "what i am saying", "this", "that", "it", "to me", "to us",
-            "shorts", "video", "song", "music", "audio",
+            "shorts", "youtube shorts", "video", "song", "songs", "music", "audio",
+            "search", "youtube search",
         })
 
-        # Multi-Action: "Go to YouTube and play Kesariya", "Open YouTube and play song Mere Liye"
+        # 1. Multi-Action: "Go to YouTube and play Kesariya", "Open YouTube and play song Mere Liye"
         m_yt_play = re.search(
             r"^(?:open|go\s+to|visit|navigate\s+to)\s+(?:the\s+)?(?:youtube|yt)(?:\s+website|\s+site|\s+app)?\s+(?:and|\&|then)\s+(?:play|watch|listen\s+to)\s+(?:the\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?(.+)$",
             txt,
@@ -1560,8 +1606,8 @@ class LinguisticIntentMatcher:
         )
         if m_yt_play:
             q = m_yt_play.group(1).strip()
-            q = re.sub(r"\s+on\s+youtube$", "", q).strip()
-            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q).strip()
+            q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
+            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
                 return StructuredAction(
                     intent=CanonicalIntent.PLAY_MEDIA,
@@ -1571,11 +1617,15 @@ class LinguisticIntentMatcher:
                     normalized_input=norm_text,
                 )
 
-        m = re.search(r"^(?:play|watch|listen\s+to|i\s+want\s+to\s+(?:watch|listen\s+to|hear))\s+(?:the\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?(.+?)(?:\s+on\s+youtube)?$", txt)
-        if m:
-            q = m.group(1).strip()
-            q = re.sub(r"\s+on\s+youtube$", "", q).strip()
-            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q).strip()
+        # 2. Infix / Platform: "YouTube pe <track> chala do", "On YouTube play <artist>"
+        m_plat = re.search(
+            r"^(?:youtube\s+(?:pe|par|me|mein)|on\s+youtube)\s+(?:play\s+|baja\s+do\s+|chala\s+do\s+)?(?:the\s+)?(?:song\s+|gaana\s+)?(.+?)(?:\s+(?:chala\s+do|chalao|bajao|bhajao|baja\s+do|play\s+karo|play))?$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_plat:
+            q = m_plat.group(1).strip()
+            q = re.sub(r"\s+(?:chala\s+do|chalao|bajao|bhajao|baja\s+do|play\s+karo)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
                 return StructuredAction(
                     intent=CanonicalIntent.PLAY_MEDIA,
@@ -1584,6 +1634,63 @@ class LinguisticIntentMatcher:
                     raw_input=raw,
                     normalized_input=norm_text,
                 )
+
+        # 3. English Prefix: "Play [the] [song] Kesariya [on youtube]"
+        m_en = re.search(
+            r"^(?:play|watch|listen\s+to|i\s+want\s+to\s+(?:watch|listen\s+to|hear))\s+(?:an?\s+)?(?:song\s+by\s+|track\s+by\s+|the\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?(.+?)(?:\s+song|\s+songs)?(?:\s+on\s+youtube)?$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_en:
+            q = m_en.group(1).strip()
+            q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
+            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q, flags=re.I).strip()
+            if q and q.lower() not in non_media_queries:
+                return StructuredAction(
+                    intent=CanonicalIntent.PLAY_MEDIA,
+                    confidence=0.98,
+                    parameters={"platform": "youtube", "query": q},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # 4. Hindi / Hinglish Prefix: "Gaana sunao <query>", "Chala do <track>", "Baja do <artist>"
+        m_hi_pre = re.search(
+            r"^(?:(?:gaana|gaane|song|songs|music|track)\s+)?(?:baja\s+do|bajao|bhajao|chala\s+do|chalao|chalu\s+karo|chalu\s+kar\s+do|sunao|suna\s+do|lagao|laga\s+do)\s+(?:koi\s+)?(?:accha\s+sa\s+|ek\s+)?(?:gaana|song|songs|music|track)?\s*(.+)$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_hi_pre:
+            q = m_hi_pre.group(1).strip()
+            q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
+            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q, flags=re.I).strip()
+            if q and q.lower() not in non_media_queries:
+                return StructuredAction(
+                    intent=CanonicalIntent.PLAY_MEDIA,
+                    confidence=0.98,
+                    parameters={"platform": "youtube", "query": q},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # 5. Hindi / Hinglish Postfix: "<query> songs bhajao", "<query> wala gaana chala do", "<artist> ke gaane bajao"
+        m_hi_post = re.search(
+            r"^(.+?)\s+(?:ke\s+|ka\s+|wala\s+|wali\s+)?(?:gaana|gaane|geet|song|songs|music|track)?\s*(?:bhajao|bajao|baja\s+do|baja\s+dijiye|bajana|chala\s+do|chalao|chalu\s+karo|chalu\s+kar\s+do|sunao|suna\s+do|lagao|laga\s+do|play\s+karo)(?:\s+(?:for\s+me|please|kripya|now))?$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_hi_post:
+            q = m_hi_post.group(1).strip()
+            q = re.sub(r"\s+(?:ke|ka|wala|wali|song|songs|gaana)$", "", q, flags=re.I).strip()
+            if q and q.lower() not in non_media_queries:
+                return StructuredAction(
+                    intent=CanonicalIntent.PLAY_MEDIA,
+                    confidence=0.98,
+                    parameters={"platform": "youtube", "query": q},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
         return None
 
     def _match_app_launch(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
