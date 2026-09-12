@@ -966,6 +966,25 @@ class NovaApplication:
                     res = self.browser_manager.execute_plan(plan)
                 else:
                     res = self.browser_manager.execute_command(user_text)
+
+                if res and res.success:
+                    self.recent_context.update_browser_state(
+                        browser_name="Google Chrome",
+                        url=getattr(res, "url", "https://www.youtube.com/shorts"),
+                        title="YouTube Shorts",
+                    )
+                    self.recent_context.is_shorts_active = True
+                    self.recent_context.add_turn(
+                        user_input=user_text,
+                        intent=CanonicalIntent.WATCH_SHORTS.value,
+                        action="watch_shorts",
+                        action_result=res.message,
+                        success=True,
+                        target_app="Google Chrome",
+                        target_browser="Google Chrome",
+                        current_url=getattr(res, "url", "https://www.youtube.com/shorts"),
+                        current_title="YouTube Shorts",
+                    )
                 from personality.response_orchestrator import ResponseOrchestrator
                 orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
                 DashboardStatsManager.record_result("✓ YouTube Shorts opened" if res and res.success else "✗ Failed to open Shorts", success=bool(res and res.success))
@@ -988,6 +1007,17 @@ class NovaApplication:
                     res_title = res_meta.get("title")
                     res_msg = getattr(res, "message", "executed")
                     res_success = getattr(res, "success", True)
+                    if structured_action.intent in (
+                        CanonicalIntent.START_AUTO_SHORTS,
+                        CanonicalIntent.STOP_AUTO_SHORTS,
+                        CanonicalIntent.PAUSE_AUTO_SHORTS,
+                        CanonicalIntent.RESUME_AUTO_SHORTS,
+                    ):
+                        self.recent_context.is_shorts_active = True
+                        self.recent_context.is_auto_scroll_active = (
+                            structured_action.intent in (CanonicalIntent.START_AUTO_SHORTS, CanonicalIntent.RESUME_AUTO_SHORTS)
+                            and res_success
+                        )
                     self.recent_context.add_turn(
                         user_input=user_text,
                         intent=structured_action.intent.value,
@@ -996,8 +1026,8 @@ class NovaApplication:
                         success=res_success,
                         target_app="Google Chrome",
                         target_browser="Google Chrome",
-                        current_url=res_url,
-                        current_title=res_title,
+                        current_url=res_url or self.recent_context.current_url,
+                        current_title=res_title or self.recent_context.current_page_title,
                     )
                     from personality.response_orchestrator import ResponseOrchestrator
                     orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)

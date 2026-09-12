@@ -107,6 +107,10 @@ class MockBrowserEngine(BaseBrowserEngine):
     def scroll_to_bottom(self) -> bool:
         return True
 
+    def press_key(self, key_name: str) -> bool:
+        self.scripts_executed.append(f"press_key:{key_name}")
+        return True
+
     def extract_page_content(self):
         from browser.models import PageContent
         return PageContent(url=self.current_url if hasattr(self, 'current_url') else "", title="Mock Title", text="Mock page text")

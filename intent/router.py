@@ -65,6 +65,8 @@ def get_routing_domain(intent: CanonicalIntent) -> RoutingDomain:
         CanonicalIntent.WATCH_SHORTS,
         CanonicalIntent.START_AUTO_SHORTS,
         CanonicalIntent.STOP_AUTO_SHORTS,
+        CanonicalIntent.PAUSE_AUTO_SHORTS,
+        CanonicalIntent.RESUME_AUTO_SHORTS,
     ):
         return RoutingDomain.BROWSER
 
@@ -202,7 +204,7 @@ def structured_action_to_browser_plan(action: StructuredAction) -> Any:
         return BrowserActionPlan(
             action_type=ActionType.OPEN_SITE,
             platform=Platform.GENERIC,
-            target_url=url,
+            target_url=str(url or ""),
             metadata={"site_key": entity},
             raw_prompt=raw,
         )
@@ -284,6 +286,31 @@ def structured_action_to_browser_plan(action: StructuredAction) -> Any:
             platform=Platform.YOUTUBE,
             auto_navigation=True,
             raw_prompt=raw,
+            metadata=params,
+        )
+
+    if action.intent == CanonicalIntent.STOP_AUTO_SHORTS:
+        return BrowserActionPlan(
+            action_type=ActionType.STOP_AUTO_SHORTS,
+            platform=Platform.YOUTUBE,
+            raw_prompt=raw,
+            metadata=params,
+        )
+
+    if action.intent == CanonicalIntent.PAUSE_AUTO_SHORTS:
+        return BrowserActionPlan(
+            action_type=ActionType.PAUSE_AUTO_SHORTS,
+            platform=Platform.YOUTUBE,
+            raw_prompt=raw,
+            metadata=params,
+        )
+
+    if action.intent == CanonicalIntent.RESUME_AUTO_SHORTS:
+        return BrowserActionPlan(
+            action_type=ActionType.RESUME_AUTO_SHORTS,
+            platform=Platform.YOUTUBE,
+            raw_prompt=raw,
+            metadata=params,
         )
 
     if action.intent == CanonicalIntent.OPEN_RESULT:

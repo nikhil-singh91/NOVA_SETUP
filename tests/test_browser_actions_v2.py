@@ -160,6 +160,10 @@ class MockBrowserEngineV2(BaseBrowserEngine):
         self.scroll_actions.append("scroll_bottom")
         return True
 
+    def press_key(self, key_name: str) -> bool:
+        self.history_actions.append(f"press_key:{key_name}")
+        return True
+
     def extract_page_content(self) -> PageContent:
         extractor = PageContentExtractor()
         return extractor.extract_page(self)

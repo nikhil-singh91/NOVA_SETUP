@@ -114,8 +114,8 @@ class LinguisticIntentMatcher:
         if res:
             return res
 
-        # 6A. YouTube Shorts ("Play Shorts", "Open YouTube Shorts", "Show me YouTube Shorts")
-        res = self._match_shorts_commands(txt, raw, clean_text)
+        # 6A. YouTube Shorts ("Play Shorts", "Open YouTube Shorts", "Show me YouTube Shorts", "youtube scroll", "start auto scroll")
+        res = self._match_shorts_commands(txt, raw, clean_text, context=context, screen_state=screen_state)
         if res:
             return res
 
@@ -203,7 +203,7 @@ class LinguisticIntentMatcher:
         # Cancellation / Stop
         if txt in [
             "cancel", "stop", "nevermind", "never mind", "roko", "band karo",
-            "stop research", "stop scrolling", "stop auto shorts", "abort",
+            "stop research", "abort",
             "stop doing that", "don't continue", "dont continue", "stop task",
             "cancel task", "रहने दो", "रुको"
         ]:
@@ -1352,8 +1352,117 @@ class LinguisticIntentMatcher:
             )
         return None
 
-    def _match_shorts_commands(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
+    def _match_shorts_commands(
+        self,
+        txt: str,
+        raw: str,
+        norm_text: str,
+        context: Any | None = None,
+        screen_state: Any | None = None,
+    ) -> StructuredAction | None:
         txt_clean = txt.strip().lower()
+
+        # 1. STOP AUTO SCROLL
+        stop_patterns = [
+            "stop scrolling", "stop auto scroll", "stop auto-scroll",
+            "stop auto scrolling", "stop shorts scroll", "stop shorts auto scroll",
+            "stop shorts", "scrolling band karo", "shorts roko", "shorts auto scroll roko",
+        ]
+        if txt_clean in stop_patterns or re.search(r"^stop\s+(?:auto\s+)?scroll(?:ing)?$", txt_clean):
+            return StructuredAction(
+                intent=CanonicalIntent.STOP_AUTO_SHORTS,
+                confidence=0.99,
+                parameters={"platform": "youtube", "target": "CURRENT_YOUTUBE_SHORTS_FEED"},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # 2. PAUSE AUTO SCROLL
+        pause_patterns = [
+            "pause scrolling", "pause auto scroll", "pause auto-scroll",
+            "pause scroll", "pause shorts", "scrolling pause karo", "shorts pause karo",
+        ]
+        is_pause_cmd = txt_clean in pause_patterns or txt_clean == "pause"
+        if is_pause_cmd:
+            in_shorts_context = False
+            if context:
+                cur_url = getattr(context, "current_url", "") or ""
+                cur_title = getattr(context, "current_page_title", "") or ""
+                last_act = getattr(context, "last_action", "") or ""
+                if "shorts" in cur_url.lower() or "shorts" in cur_title.lower() or "shorts" in last_act.lower():
+                    in_shorts_context = True
+            if screen_state:
+                cur_url = getattr(screen_state, "current_url", "") or ""
+                cur_title = getattr(screen_state, "active_tab_title", "") or ""
+                if "shorts" in cur_url.lower() or "shorts" in cur_title.lower():
+                    in_shorts_context = True
+
+            if txt_clean in pause_patterns or in_shorts_context:
+                return StructuredAction(
+                    intent=CanonicalIntent.PAUSE_AUTO_SHORTS,
+                    confidence=0.98,
+                    parameters={"platform": "youtube", "target": "CURRENT_YOUTUBE_SHORTS_FEED"},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # 3. RESUME AUTO SCROLL
+        resume_patterns = [
+            "resume scrolling", "resume auto scroll", "resume auto-scroll",
+            "resume scroll", "resume shorts", "continue scrolling", "start again",
+            "keep scrolling shorts", "scrolling resume karo", "shorts resume karo",
+            "resume",
+        ]
+        if txt_clean in resume_patterns or re.search(r"^(?:resume|continue)\s+(?:auto\s+)?scroll(?:ing)?$", txt_clean):
+            return StructuredAction(
+                intent=CanonicalIntent.RESUME_AUTO_SHORTS,
+                confidence=0.98,
+                parameters={"platform": "youtube", "target": "CURRENT_YOUTUBE_SHORTS_FEED"},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # 4. START AUTO SCROLL / YOUTUBE SCROLL (Follow-up or Mode Activation)
+        auto_scroll_phrases = [
+            "youtube scroll", "start auto scroll", "start automatic scrolling",
+            "auto scroll", "scroll shorts", "scroll shorts automatically",
+            "keep scrolling", "start scrolling", "start scrolling shorts",
+            "automatically scroll shorts", "shorts auto scroll", "youtube auto scroll",
+            "scroll youtube shorts", "auto scroll youtube",
+        ]
+        is_auto_scroll_phrase = txt_clean in auto_scroll_phrases or bool(
+            re.search(r"^(?:start\s+)?auto\s+scroll(?:\s+shorts|\s+youtube)?$", txt_clean)
+            or re.search(r"^(?:start\s+)?scrolling\s+shorts(?:\s+automatically)?$", txt_clean)
+            or re.search(r"^youtube\s+scroll(?:ing)?$", txt_clean)
+        )
+
+        if is_auto_scroll_phrase:
+            prior_shorts = False
+            if context:
+                cur_url = getattr(context, "current_url", "") or ""
+                cur_title = getattr(context, "current_page_title", "") or ""
+                last_act = getattr(context, "last_action", "") or ""
+                if "shorts" in cur_url.lower() or "shorts" in cur_title.lower() or "shorts" in last_act.lower() or "youtube" in (cur_url + cur_title + last_act).lower():
+                    prior_shorts = True
+            if screen_state:
+                cur_url = getattr(screen_state, "current_url", "") or ""
+                cur_title = getattr(screen_state, "active_tab_title", "") or ""
+                if "shorts" in cur_url.lower() or "shorts" in cur_title.lower():
+                    prior_shorts = True
+
+            return StructuredAction(
+                intent=CanonicalIntent.START_AUTO_SHORTS,
+                confidence=0.98,
+                parameters={
+                    "platform": "youtube",
+                    "target": "CURRENT_YOUTUBE_SHORTS_FEED",
+                    "prior_context_shorts": prior_shorts,
+                },
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # 5. OPEN / WATCH SHORTS
         if txt_clean in [
             "play shorts", "open shorts", "show me shorts", "open youtube shorts",
             "show me youtube shorts", "play youtube shorts", "watch shorts",
@@ -1370,9 +1479,9 @@ class LinguisticIntentMatcher:
 
         if any(k in txt_clean for k in ["auto shorts", "auto scroll shorts", "automatically"]) and "short" in txt_clean:
             return StructuredAction(
-                intent=CanonicalIntent.WATCH_SHORTS,
+                intent=CanonicalIntent.START_AUTO_SHORTS,
                 confidence=0.98,
-                parameters={"platform": "youtube", "query": "", "auto_scroll": True},
+                parameters={"platform": "youtube", "query": "", "auto_scroll": True, "target": "CURRENT_YOUTUBE_SHORTS_FEED"},
                 raw_input=raw,
                 normalized_input=norm_text,
             )

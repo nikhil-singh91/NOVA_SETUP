@@ -133,6 +133,10 @@ class BaseBrowserEngine(ABC):
         """Scroll active tab to bottom of page."""
 
     @abstractmethod
+    def press_key(self, key_name: str) -> bool:
+        """Send a keyboard stroke (e.g. ArrowDown, ArrowUp, Space, Escape, Return) to the active browser window."""
+
+    @abstractmethod
     def extract_page_content(self) -> PageContent:
         """Extract readable sanitized text and headings from active page."""
 
@@ -680,6 +684,73 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
         except Exception:
             self.execute_script("window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });")
             return True
+
+    def press_key(self, key_name: str) -> bool:
+        """Send a keyboard stroke (e.g. ArrowDown, ArrowUp, Space, Return) to the active browser window."""
+        key_map: dict[str, int] = {
+            "ArrowDown": 125,
+            "down": 125,
+            "ArrowUp": 126,
+            "up": 126,
+            "ArrowLeft": 123,
+            "left": 123,
+            "ArrowRight": 124,
+            "right": 124,
+            "Space": 49,
+            "space": 49,
+            "Return": 36,
+            "Enter": 36,
+            "enter": 36,
+            "Escape": 53,
+            "esc": 53,
+            "PageDown": 121,
+            "pagedown": 121,
+            "PageUp": 116,
+            "pageup": 116,
+        }
+        code = key_map.get(key_name)
+        # 1. Try AppleScript System Events key code
+        if code is not None:
+            script = f'''
+            tell application "{self._app_name}" to activate
+            delay 0.05
+            tell application "System Events"
+                key code {code}
+            end tell
+            '''
+            out = self._run_applescript(script)
+            if out is not None:
+                log_browser_diagnostics("PRESS_KEY", "SUCCESS", extra=f"key={key_name}, code={code}")
+                return True
+
+        # 2. Quartz CGEvent keyboard fallback
+        if code is not None:
+            try:
+                import Quartz
+                CG: Any = Quartz
+                ev_down = CG.CGEventCreateKeyboardEvent(None, code, True)
+                ev_up = CG.CGEventCreateKeyboardEvent(None, code, False)
+                CG.CGEventPost(CG.kCGHIDEventTap, ev_down)
+                time.sleep(0.02)
+                CG.CGEventPost(CG.kCGHIDEventTap, ev_up)
+                log_browser_diagnostics("PRESS_KEY_QUARTZ", "SUCCESS", extra=f"key={key_name}")
+                return True
+            except Exception as exc:
+                logger.debug("Quartz press_key error: %s", exc)
+
+        # 3. DOM JavaScript Event fallback
+        js_event = f"""
+        (function() {{
+            window.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{key_name}', code: '{key_name}', bubbles: true }}));
+            window.dispatchEvent(new KeyboardEvent('keyup', {{ key: '{key_name}', code: '{key_name}', bubbles: true }}));
+            return true;
+        }})()
+        """
+        try:
+            self.execute_script(js_event)
+            return True
+        except Exception:
+            return False
 
     def execute_script(self, script: str) -> Any:
         """Run JavaScript in the active tab (when permitted by browser)."""

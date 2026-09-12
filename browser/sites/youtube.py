@@ -53,6 +53,8 @@ class YouTubeSkill(BaseSiteSkill):
             ActionType.WATCH_SHORTS,
             ActionType.START_AUTO_SHORTS,
             ActionType.STOP_AUTO_SHORTS,
+            ActionType.PAUSE_AUTO_SHORTS,
+            ActionType.RESUME_AUTO_SHORTS,
             ActionType.NEXT_ITEM,
             ActionType.PREVIOUS_ITEM,
         ):
@@ -73,7 +75,27 @@ class YouTubeSkill(BaseSiteSkill):
                 success=True,
                 action_type=plan.action_type,
                 message="Stopped YouTube Shorts auto-scroll.",
-                spoken_response="Stopped Shorts auto-scroll.",
+                spoken_response="Auto-scroll stopped.",
+            )
+
+        # 1B. Pause auto Shorts loop
+        if plan.action_type == ActionType.PAUSE_AUTO_SHORTS:
+            sessions.pause_auto_shorts()
+            return BrowserResult(
+                success=True,
+                action_type=plan.action_type,
+                message="Paused YouTube Shorts auto-scroll.",
+                spoken_response="Paused. Say resume when you want to continue.",
+            )
+
+        # 1C. Resume auto Shorts loop
+        if plan.action_type == ActionType.RESUME_AUTO_SHORTS:
+            sessions.resume_auto_shorts()
+            return BrowserResult(
+                success=True,
+                action_type=plan.action_type,
+                message="Resumed YouTube Shorts auto-scroll.",
+                spoken_response="Resuming auto-scroll.",
             )
 
         # 2. Next Short
@@ -96,8 +118,12 @@ class YouTubeSkill(BaseSiteSkill):
                 spoken_response="Previous Short.",
             )
 
-        # 4. Start / Watch Shorts
-        if plan.action_type in (ActionType.WATCH_SHORTS, ActionType.START_AUTO_SHORTS):
+        # 4. Start Auto Shorts (Follow-up or explicit mode activation)
+        if plan.action_type == ActionType.START_AUTO_SHORTS:
+            return self._handle_start_auto_shorts(plan, engine, sessions)
+
+        # 4B. Watch Shorts (Open and verify)
+        if plan.action_type == ActionType.WATCH_SHORTS:
             return self._handle_shorts(plan, engine, sessions)
 
         # 5. Play Media / Watch Video
@@ -208,6 +234,74 @@ class YouTubeSkill(BaseSiteSkill):
             metadata={"verified": False},
         )
 
+    def _handle_start_auto_shorts(
+        self,
+        plan: BrowserActionPlan,
+        engine: BaseBrowserEngine,
+        sessions: BrowserSessionManager,
+    ) -> BrowserResult:
+        """Activate auto-scroll mode on YouTube Shorts feed with observation and verification."""
+        cur_url = ""
+        cur_title = ""
+        try:
+            info = engine.get_page_info()
+            cur_url = info.get("url", "")
+            cur_title = info.get("title", "")
+        except Exception:
+            pass
+
+        if not cur_url:
+            try:
+                st = engine.refresh_browser_state()
+                cur_url = st.get("url", "")
+                cur_title = st.get("title", "")
+            except Exception:
+                pass
+
+        is_shorts = bool(
+            "/shorts" in cur_url
+            or ("youtube.com" in cur_url and "shorts" in cur_title.lower())
+            or (not cur_url and plan.platform == Platform.YOUTUBE)
+        )
+
+        # If not currently on Shorts, check if prior context established Shorts intent
+        if not is_shorts:
+            meta = getattr(plan, "metadata", {}) or {}
+            has_prior_shorts = bool(
+                meta.get("prior_context_shorts")
+                or plan.auto_navigation
+                or (plan.query and "short" in plan.query.lower())
+            )
+            if has_prior_shorts:
+                succ = engine.open_url(self.SHORTS_URL)
+                time.sleep(0.5)
+                if succ:
+                    is_shorts = True
+                    cur_url = self.SHORTS_URL
+
+        if not is_shorts:
+            log_browser_diagnostics("START_AUTO_SHORTS", "REJECTED_NOT_SHORTS", url=cur_url, title=cur_title)
+            return BrowserResult(
+                success=False,
+                action_type=plan.action_type,
+                message=f"Current page ({cur_url or 'unknown'}) is not a YouTube Shorts feed.",
+                spoken_response="You're not on YouTube Shorts right now.",
+                metadata={"verified": False},
+            )
+
+        started = sessions.start_auto_shorts_loop()
+        log_browser_diagnostics("START_AUTO_SHORTS", "ACTIVATED", url=cur_url)
+        meta = getattr(plan, "metadata", {}) or {}
+        spoken = "Yep, auto-scroll is on." if meta.get("prior_context_shorts") else "Watching Shorts with auto-scrolling on."
+        return BrowserResult(
+            success=started,
+            action_type=plan.action_type,
+            message="Activated YouTube Shorts auto-scroll mode.",
+            spoken_response=spoken,
+            url=cur_url or self.SHORTS_URL,
+            metadata={"verified": True, "auto_scroll": True, "is_shorts": True},
+        )
+
     def _handle_shorts(
         self,
         plan: BrowserActionPlan,
@@ -229,9 +323,24 @@ class YouTubeSkill(BaseSiteSkill):
             return BrowserResult(
                 success=False,
                 action_type=plan.action_type,
+                message="Failed to open YouTube Shorts URL.",
                 error="Failed to open YouTube Shorts URL.",
                 spoken_response="I couldn't open YouTube Shorts right now.",
             )
+
+        time.sleep(0.5)
+        # Verify active page is actually YouTube Shorts
+        verified = False
+        try:
+            info = engine.get_page_info()
+            act_url = info.get("url", "")
+            act_title = info.get("title", "")
+            if "/shorts" in act_url or "youtube.com" in act_url:
+                verified = True
+        except Exception:
+            verified = success
+
+        log_browser_diagnostics("WATCH_SHORTS", "VERIFIED" if verified else "UNVERIFIED", url=target_url)
 
         if plan.auto_navigation or getattr(plan, "metadata", {}).get("auto_scroll"):
             logger.info("Starting background YouTube Shorts auto-scroll loop...")
@@ -240,9 +349,9 @@ class YouTubeSkill(BaseSiteSkill):
                 success=True,
                 action_type=plan.action_type,
                 message="Watching YouTube Shorts with auto-scrolling.",
-                spoken_response="Watching Shorts with auto-scrolling on. Just tell me to stop whenever you want.",
+                spoken_response="Yep, auto-scroll is on.",
                 url=target_url,
-                metadata={"verified": True},
+                metadata={"verified": True, "auto_scroll": True, "is_shorts": True},
             )
 
         return BrowserResult(
@@ -251,7 +360,7 @@ class YouTubeSkill(BaseSiteSkill):
             message="Opened YouTube Shorts.",
             spoken_response=spoken,
             url=target_url,
-            metadata={"verified": True},
+            metadata={"verified": verified, "is_shorts": True},
         )
 
     def _handle_search(

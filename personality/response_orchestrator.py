@@ -143,11 +143,14 @@ class ResponseOrchestrator:
                     spk = f"I opened YouTube search for {title}, but couldn't verify the video started."
                 return OrchestratedResponse(disp, spk, action.intent, success=False, metadata=metadata)
 
-        # 2. YouTube Shorts Intent
+        # 2. YouTube Shorts & Auto-Scroll Intents
         if action.intent == CanonicalIntent.WATCH_SHORTS:
             q = action.parameters.get("query", "")
             if success:
-                if q:
+                if metadata.get("auto_scroll"):
+                    disp = "Auto-scroll is on. 📱" if not is_hi else "Auto-scroll chalu ho gaya hai. 📱"
+                    spk = "Yep, auto-scroll is on." if not is_hi else "Haan, auto-scroll chalu kar diya hai."
+                elif q:
                     disp = f"Here are {q} Shorts on YouTube! 📱" if not is_hi else f"Aapke liye {q} Shorts open kar diye hain! 📱"
                     spk = f"Here are {q} Shorts on YouTube." if not is_hi else f"Aapke liye {q} Shorts open kar diye hain."
                 else:
@@ -157,6 +160,32 @@ class ResponseOrchestrator:
             else:
                 disp = "Couldn't open YouTube Shorts right now." if not is_hi else "Abhi YouTube Shorts open nahi ho paya."
                 return OrchestratedResponse(disp, disp, action.intent, success=False, metadata=metadata)
+
+        if action.intent == CanonicalIntent.START_AUTO_SHORTS:
+            if success:
+                disp = "Auto-scroll is on. 📱" if not is_hi else "Auto-scroll shuru ho gaya hai. 📱"
+                spk = "Yep, auto-scroll is on." if not is_hi else "Haan, auto-scroll shuru kar diya hai."
+                return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
+            else:
+                fallback_msg = spoken_override or "You're not on YouTube Shorts right now."
+                disp = fallback_msg if not is_hi else "Aap abhi YouTube Shorts par nahi hain."
+                spk = fallback_msg if not is_hi else "Aap abhi YouTube Shorts par nahi hain."
+                return OrchestratedResponse(disp, spk, action.intent, success=False, metadata=metadata)
+
+        if action.intent == CanonicalIntent.STOP_AUTO_SHORTS:
+            disp = "Auto-scroll stopped. ⏹️" if not is_hi else "Auto-scroll band ho gaya hai. ⏹️"
+            spk = "Auto-scroll stopped." if not is_hi else "Auto-scroll band ho gaya."
+            return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
+
+        if action.intent == CanonicalIntent.PAUSE_AUTO_SHORTS:
+            disp = "Auto-scroll paused. ⏸️" if not is_hi else "Auto-scroll pause ho gaya. ⏸️"
+            spk = "Paused. Say resume when you want to continue." if not is_hi else "Pause kar diya hai. Jab chaho resume keh dena."
+            return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
+
+        if action.intent == CanonicalIntent.RESUME_AUTO_SHORTS:
+            disp = "Resuming auto-scroll. ▶️" if not is_hi else "Auto-scroll resume kar raha hoon. ▶️"
+            spk = "Resuming auto-scroll." if not is_hi else "Auto-scroll resume kar diya."
+            return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
 
         # 3. Screen Awareness Intent
         if action.intent in (CanonicalIntent.WHAT_AM_I_LOOKING_AT, CanonicalIntent.READ_CURRENT_PAGE, CanonicalIntent.SUMMARIZE_CURRENT_PAGE):

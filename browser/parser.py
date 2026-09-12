@@ -94,9 +94,36 @@ class BrowserIntentParser:
             )
 
         # Stop auto scrolling
-        if any(p in lower for p in ["stop auto shorts", "stop scrolling", "stop scroll", "stop shorts", "scrolling band karo", "shorts roko"]):
+        if any(p in lower for p in [
+            "stop auto shorts", "stop scrolling", "stop scroll", "stop shorts",
+            "stop auto scroll", "stop auto scrolling", "stop auto-scroll",
+            "scrolling band karo", "shorts roko", "shorts auto scroll roko"
+        ]):
             return BrowserActionPlan(
                 action_type=ActionType.STOP_AUTO_SHORTS,
+                platform=Platform.YOUTUBE,
+                raw_prompt=raw,
+            )
+
+        # Pause auto scrolling
+        if any(p in lower for p in [
+            "pause scrolling", "pause auto scroll", "pause auto-scroll",
+            "pause scroll", "pause shorts", "scrolling pause karo", "shorts pause karo",
+        ]) or lower == "pause":
+            return BrowserActionPlan(
+                action_type=ActionType.PAUSE_AUTO_SHORTS,
+                platform=Platform.YOUTUBE,
+                raw_prompt=raw,
+            )
+
+        # Resume auto scrolling
+        if any(p in lower for p in [
+            "resume scrolling", "resume auto scroll", "resume auto-scroll",
+            "resume scroll", "resume shorts", "continue scrolling", "start again",
+            "keep scrolling shorts", "scrolling resume karo", "shorts resume karo"
+        ]):
+            return BrowserActionPlan(
+                action_type=ActionType.RESUME_AUTO_SHORTS,
                 platform=Platform.YOUTUBE,
                 raw_prompt=raw,
             )
@@ -315,6 +342,17 @@ class BrowserIntentParser:
             )
 
         auto_patterns = [
+            r"^youtube\s+scroll$",
+            r"^start\s+auto\s+scroll$",
+            r"^start\s+automatic\s+scrolling$",
+            r"^auto\s+scroll$",
+            r"^scroll\s+shorts(?:\s+automatically)?$",
+            r"^automatically\s+scroll\s+shorts$",
+            r"^keep\s+scrolling$",
+            r"^start\s+scrolling(?:\s+shorts)?$",
+            r"^scroll\s+youtube\s+shorts$",
+            r"^auto\s+scroll\s+youtube$",
+            r"^shorts\s+auto\s+scroll$",
             r"^(?:start\s+)?auto\s+(?:youtube\s+)?shorts",
             r"^watch\s+(?:youtube\s+)?shorts\s+automatically",
             r"^auto\s+scroll\s+shorts",

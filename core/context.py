@@ -127,7 +127,16 @@ class RecentInteractionContext:
         self.last_created_path: Path | None = None
         self.last_opened_app: str | None = None
         self.last_clicked_element: str | None = None
+        self.is_shorts_active: bool = False
+        self.is_auto_scroll_active: bool = False
         self.last_update_time: float = datetime.now(timezone.utc).timestamp()
+
+    @property
+    def is_current_page_shorts(self) -> bool:
+        url = (self.current_url or "").lower()
+        title = (self.current_page_title or "").lower()
+        last_act = (self.last_action or "").lower()
+        return "/shorts" in url or "shorts" in title or "shorts" in last_act
 
     @property
     def turns(self) -> list[InteractionTurn]:

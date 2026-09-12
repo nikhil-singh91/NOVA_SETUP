@@ -882,6 +882,11 @@ class DashboardStatsManager:
                 pass
 
     @classmethod
+    def record_status(cls, status_text: str) -> None:
+        """Record an activity status update."""
+        cls.record_system(status_text)
+
+    @classmethod
     def get_activity_interactions(
         cls,
         limit: int | None = None,

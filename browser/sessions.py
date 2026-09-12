@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from core.logger import get_logger
 from browser.engine import BaseBrowserEngine
+from browser.auto_scroll import AutoScrollController, AutoScrollPolicy, AutoScrollState
 
 logger = get_logger(__name__)
 
@@ -23,6 +24,7 @@ class BrowserSessionManager:
         self._worker_thread: threading.Thread | None = None
         self._nova_tabs: list[str] = []
         self._research_tabs: list[str] = []
+        self.auto_scroll_controller: AutoScrollController = AutoScrollController(engine=self.engine)
 
     @property
     def active_task(self) -> str | None:
@@ -33,6 +35,8 @@ class BrowserSessionManager:
     def is_task_running(self) -> bool:
         """Return True if a background automation loop is active."""
         with self._lock:
+            if self.auto_scroll_controller.is_active() or self.auto_scroll_controller.is_running():
+                return True
             return (
                 self._worker_thread is not None
                 and self._worker_thread.is_alive()
@@ -91,76 +95,41 @@ class BrowserSessionManager:
 
     def start_auto_shorts_loop(
         self,
-        interval_seconds: float = 15.0,
+        interval_seconds: float = 12.0,
         max_scrolls: int = 50,
         on_scroll: Callable[[int], None] | None = None,
-    ) -> None:
+    ) -> bool:
         """Start a controlled, bounded, and cancellable YouTube Shorts auto-navigation loop."""
         self.stop_active_task()
 
         with self._lock:
             self._active_task_name = "youtube_shorts_auto_scroll"
-            self._stop_requested.clear()
 
-            def _loop() -> None:
-                logger.info(
-                    "YouTube Shorts auto-navigation started (interval=%.1fs, max_scrolls=%d).",
-                    interval_seconds,
-                    max_scrolls,
-                )
-                scroll_count = 0
-                while not self._stop_requested.is_set() and scroll_count < max_scrolls:
-                    # Sleep in small slices to allow instantaneous interruption
-                    elapsed = 0.0
-                    while elapsed < interval_seconds and not self._stop_requested.is_set():
-                        time.sleep(0.2)
-                        elapsed += 0.2
+        policy = AutoScrollPolicy(
+            dwell_time_seconds=interval_seconds,
+            max_total_scrolls=max_scrolls,
+        )
+        if on_scroll:
+            self.auto_scroll_controller.on_scroll_completed = lambda count, obs: on_scroll(count)
 
-                    if self._stop_requested.is_set():
-                        break
+        succ, _ = self.auto_scroll_controller.start(engine=self.engine, policy=policy)
+        return succ
 
-                    # Dispatch next Short navigation via keypress or DOM trigger
-                    scroll_count += 1
-                    logger.debug("Auto Shorts: Scrolling to next short (#%d)", scroll_count)
+    def pause_auto_shorts(self) -> bool:
+        """Pause the active YouTube Shorts auto-scroll loop."""
+        return self.auto_scroll_controller.pause()
 
-                    # Method 1: Down Arrow keypress event in YouTube Shorts
-                    next_js = """
-                    (function() {
-                        // 1. Try clicking next button if exists
-                        const nextBtn = document.querySelector('button[aria-label="Next video"], #navigation-button-down button');
-                        if (nextBtn) {
-                            nextBtn.click();
-                            return "next_btn_clicked";
-                        }
-                        // 2. Dispatch Down Arrow Key event
-                        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true }));
-                        // 3. Smooth scroll container fallback
-                        window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
-                        return "arrow_down_dispatched";
-                    })()
-                    """
-                    try:
-                        self.engine.execute_script(next_js)
-                    except Exception as exc:
-                        logger.warning("Error during auto-shorts scroll: %s", exc)
+    def resume_auto_shorts(self) -> bool:
+        """Resume the paused YouTube Shorts auto-scroll loop."""
+        return self.auto_scroll_controller.resume()
 
-                    if on_scroll:
-                        try:
-                            on_scroll(scroll_count)
-                        except Exception:
-                            pass
+    def is_auto_shorts_active(self) -> bool:
+        """Return True if auto-scroll is actively running."""
+        return self.auto_scroll_controller.is_active()
 
-                logger.info("YouTube Shorts auto-navigation finished or stopped.")
-                with self._lock:
-                    if self._active_task_name == "youtube_shorts_auto_scroll":
-                        self._active_task_name = None
-
-            self._worker_thread = threading.Thread(
-                target=_loop,
-                name="nova-shorts-auto-navigator",
-                daemon=True,
-            )
-            self._worker_thread.start()
+    def is_auto_shorts_paused(self) -> bool:
+        """Return True if auto-scroll is paused."""
+        return self.auto_scroll_controller.is_paused()
 
     def next_short(self) -> bool:
         """Trigger immediate navigation to the next Short."""
@@ -204,11 +173,20 @@ class BrowserSessionManager:
 
     def stop_active_task(self) -> bool:
         """Immediately interrupt and stop any running background automation loop."""
+        stopped = False
         with self._lock:
-            if not self.is_task_running():
-                return False
+            if (
+                self.auto_scroll_controller.is_active()
+                or self.auto_scroll_controller.is_paused()
+                or self.auto_scroll_controller.is_running()
+            ):
+                self.auto_scroll_controller.stop()
+                stopped = True
 
-            self._stop_requested.set()
+            if self._worker_thread is not None and self._worker_thread.is_alive():
+                self._stop_requested.set()
+                stopped = True
+
             task_name = self._active_task_name
             self._active_task_name = None
 
@@ -216,10 +194,13 @@ class BrowserSessionManager:
             self._worker_thread.join(timeout=0.5)
             self._worker_thread = None
 
-        logger.info("Stopped active browser background task: '%s'", task_name)
-        return True
+        if stopped:
+            logger.info("Stopped active browser background task: '%s'", task_name or "auto_scroll")
+        return stopped
 
     def shutdown(self) -> None:
         """Tear down all background session threads."""
         self.stop_active_task()
+        if hasattr(self, "auto_scroll_controller"):
+            self.auto_scroll_controller.stop()
         logger.info("BrowserSessionManager shut down.")

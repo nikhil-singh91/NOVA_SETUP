@@ -44,6 +44,8 @@ class CanonicalIntent(str, Enum):
     WATCH_SHORTS = "watch_shorts"
     START_AUTO_SHORTS = "start_auto_shorts"
     STOP_AUTO_SHORTS = "stop_auto_shorts"
+    PAUSE_AUTO_SHORTS = "pause_auto_shorts"
+    RESUME_AUTO_SHORTS = "resume_auto_shorts"
     OPEN_RESULT = "open_result"
     COMPARE_PRODUCTS = "compare_products"
 

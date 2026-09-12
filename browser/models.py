@@ -23,6 +23,8 @@ class ActionType(str, Enum):
     WATCH_SHORTS = "watch_shorts"
     START_AUTO_SHORTS = "start_auto_shorts"
     STOP_AUTO_SHORTS = "stop_auto_shorts"
+    PAUSE_AUTO_SHORTS = "pause_auto_shorts"
+    RESUME_AUTO_SHORTS = "resume_auto_shorts"
     NEXT_ITEM = "next_item"
     PREVIOUS_ITEM = "previous_item"
     OPEN_RESULT = "open_result"
