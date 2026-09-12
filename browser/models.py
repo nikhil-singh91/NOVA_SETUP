@@ -14,6 +14,8 @@ class ActionType(str, Enum):
 
     # V1 Base Actions
     OPEN_SITE = "open_site"
+    OPEN_NEW_TAB = "open_new_tab"
+    SEARCH_CURRENT_TAB = "search_current_tab"
     SEARCH_WEB = "search_web"
     SEARCH_SITE = "search_site"
     PLAY_MEDIA = "play_media"
@@ -128,6 +130,10 @@ class BrowserActionPlan:
     auto_navigation: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def action(self) -> ActionType:
+        return self.action_type
+
 
 @dataclass
 class BrowserResult:
@@ -136,13 +142,21 @@ class BrowserResult:
     success: bool
     action_type: ActionType
     message: str
-    spoken_response: str
+    spoken_response: str = ""
     url: str = ""
     error: str | None = None
     page_content: PageContent | None = None
     task_plan: BrowserTaskPlan | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def __post_init__(self) -> None:
+        if not self.spoken_response and self.message:
+            self.spoken_response = self.message
+
+    @property
+    def details(self) -> dict[str, Any]:
+        return self.metadata
 
 
 @dataclass

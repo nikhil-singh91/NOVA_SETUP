@@ -183,6 +183,19 @@ class EnvironmentObserver:
             self._last_context = ctx
             self._last_refresh_time = datetime.now().timestamp()
 
+            try:
+                from core.context import recent_interaction_context
+                recent_interaction_context.update_from_observation(
+                    app=ctx.active_application,
+                    win=ctx.active_window,
+                    browser=ctx.active_browser,
+                    tab_index=ctx.active_tab_index,
+                    tab_title=ctx.current_page_title,
+                    url=ctx.current_url,
+                )
+            except Exception:
+                pass
+
             log_environment_debug(
                 "REFRESH",
                 app=ctx.active_application,
@@ -349,7 +362,26 @@ class ContextResolver:
         )
 
         # -------------------------------------------------------------
-        # 1. BROWSER & WEBPAGE REFERENCES ("here", "this page", "this site", "on this page")
+        # 1A. BROWSER TAB REFERENCES ("this tab", "this new tab", "that tab", "new tab")
+        # -------------------------------------------------------------
+        tab_keywords = ["this new tab", "that new tab", "the new tab", "new tab", "this tab", "that tab", "current tab", "the tab"]
+        if any(ref == k or ref.startswith(f"{k} ") for k in tab_keywords):
+            from core.context import ContextualReferenceResolver, recent_interaction_context
+            res = ContextualReferenceResolver.resolve_reference(ref, recent_interaction_context)
+            if res.resolved:
+                return {
+                    "resolved": True,
+                    "target": res.target_value,
+                    "site_key": "",
+                    "domain": context.current_domain or "",
+                    "title": context.current_page_title or "Current Tab",
+                    "source": res.source,
+                    "type": "browser_tab",
+                    "description": res.description,
+                }
+
+        # -------------------------------------------------------------
+        # 1B. BROWSER & WEBPAGE REFERENCES ("here", "this page", "this site", "on this page")
         # -------------------------------------------------------------
         if ref in ("here", "this page", "current page", "this site", "current site", "the page", "the site"):
             if context.current_url:
@@ -424,6 +456,21 @@ class ContextResolver:
                     "type": "directory" if is_dir else "file",
                     "description": f"Recently created {'folder' if is_dir else 'file'} '{context.last_created_path.name}'",
                 }
+
+        # Delegate general resolution to ContextualReferenceResolver
+        from core.context import ContextualReferenceResolver, recent_interaction_context
+        gen_res = ContextualReferenceResolver.resolve_reference(reference_term, recent_interaction_context)
+        if gen_res.resolved:
+            return {
+                "resolved": True,
+                "target": gen_res.target_value,
+                "site_key": "",
+                "domain": "",
+                "title": str(gen_res.target_value),
+                "source": gen_res.source,
+                "type": gen_res.target_type,
+                "description": gen_res.description,
+            }
 
         # Unresolved
         return {

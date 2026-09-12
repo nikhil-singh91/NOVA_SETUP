@@ -38,7 +38,10 @@ def log_intent_diagnostics(action: StructuredAction) -> None:
 
     # Generate action plan description
     plan_lines: list[str] = []
-    if action.intent == CanonicalIntent.SEARCH_WEBSITE:
+    if action.intent == CanonicalIntent.SEARCH_CURRENT_TAB:
+        plan_lines.append(f"1. Target active/new browser tab ({target or 'current tab'})")
+        plan_lines.append(f"2. Search \"{query}\"")
+    elif action.intent == CanonicalIntent.SEARCH_WEBSITE:
         plan_lines.append(f"1. Open {target or 'target site'}")
         plan_lines.append(f"2. Search \"{query}\"")
     elif action.intent == CanonicalIntent.SEARCH_WEB:
@@ -114,6 +117,8 @@ class NaturalLanguageIntentEngine:
         text: str,
         allow_ai_fallback: bool = True,
         candidates: list[str] | None = None,
+        context: Any | None = None,
+        screen_state: Any | None = None,
     ) -> StructuredAction:
         """Parse natural speech input through the 5-layer understanding pipeline, optionally evaluating N-best candidates."""
         if not text or not text.strip():
@@ -141,8 +146,8 @@ class NaturalLanguageIntentEngine:
                 normalized_input="",
             )
 
-        # Layer 2 & 3: Fast Linguistic Pattern & Semantic Paraphrase Matching
-        matched_action = self.matcher.match(norm)
+        # Layer 2 & 3: Fast Linguistic Pattern & Semantic Paraphrase Matching (Context-Aware)
+        matched_action = self.matcher.match(norm, context=context, screen_state=screen_state)
         if matched_action and matched_action.confidence >= 0.85:
             log_intent_diagnostics(matched_action)
             return matched_action
@@ -151,7 +156,7 @@ class NaturalLanguageIntentEngine:
         if len(all_candidates) > 1:
             for cand in all_candidates[1:]:
                 cand_norm = self.normalizer.normalize(cand)
-                cand_action = self.matcher.match(cand_norm)
+                cand_action = self.matcher.match(cand_norm, context=context, screen_state=screen_state)
                 if cand_action and cand_action.confidence >= 0.85 and cand_action.intent != CanonicalIntent.GENERAL_CONVERSATION:
                     cand_action.raw_input = text
                     log_intent_diagnostics(cand_action)

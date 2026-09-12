@@ -54,6 +54,12 @@ class BrowserActionRouter:
         if plan.action_type == ActionType.SWITCH_TAB:
             return self._handle_tab_switching(plan)
 
+        # 1B. Open Dedicated New Tab or Search in Current Tab
+        if plan.action_type in (ActionType.OPEN_NEW_TAB, ActionType.SEARCH_CURRENT_TAB):
+            generic_skill = next((s for s in self._skills if isinstance(s, GenericSiteSkill)), None)
+            if generic_skill:
+                return generic_skill.execute(plan, self.engine, self.sessions)
+
         # 2. Scrolling Actions ("Scroll down", "Scroll up", "Scroll to top", "Scroll to bottom")
         if plan.action_type == ActionType.SCROLL_PAGE:
             return self._handle_scrolling(plan)

@@ -81,6 +81,36 @@ class ResponseOrchestrator:
         metadata = getattr(result, "metadata", {}) or {}
         spoken_override = getattr(result, "spoken_response", None)
 
+        # 0A. Search Current Browser Tab Intent
+        if action.intent == CanonicalIntent.SEARCH_CURRENT_TAB:
+            q = action.parameters.get("query", "")
+            if success:
+                if is_hi:
+                    disp = f"Haan, us tab mein '{q}' search kar diya! 🔍"
+                    spk = f"Haan, us tab mein {q} search kar diya."
+                else:
+                    disp = f"Yep, searched for {q} in that tab. 🔍"
+                    spk = f"Yep, searched for {q} in that tab."
+                return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
+            else:
+                disp = f"Could not search for {q} in the active tab." if not is_hi else f"Active tab mein {q} search nahi ho paya."
+                return OrchestratedResponse(disp, disp, action.intent, success=False, metadata=metadata)
+
+        # 0B. Open New Tab Intent
+        if action.intent == CanonicalIntent.OPEN_NEW_TAB:
+            browser = action.parameters.get("browser") or metadata.get("browser", "Chrome")
+            if success:
+                if is_hi:
+                    disp = f"Naya tab open kar diya {browser} mein! 🌐"
+                    spk = f"Naya tab open kar diya {browser} mein."
+                else:
+                    disp = f"Opened a new tab in {browser}. 🌐"
+                    spk = f"Opened a new tab in {browser}."
+                return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
+            else:
+                disp = f"Could not open a new tab in {browser}." if not is_hi else f"{browser} mein naya tab open nahi ho paya."
+                return OrchestratedResponse(disp, disp, action.intent, success=False, metadata=metadata)
+
         # 1. Media Playback Intent
         if action.intent == CanonicalIntent.PLAY_MEDIA:
             title = metadata.get("clean_title") or metadata.get("video_title") or action.parameters.get("query", "music")

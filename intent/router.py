@@ -38,6 +38,7 @@ def get_routing_domain(intent: CanonicalIntent) -> RoutingDomain:
         return RoutingDomain.TASK_AGENT
     if intent in (
         CanonicalIntent.OPEN_WEBSITE,
+        CanonicalIntent.SEARCH_CURRENT_TAB,
         CanonicalIntent.SEARCH_CURRENT_SITE,
         CanonicalIntent.SEARCH_WEBSITE,
         CanonicalIntent.SEARCH_WEB,
@@ -52,6 +53,7 @@ def get_routing_domain(intent: CanonicalIntent) -> RoutingDomain:
         CanonicalIntent.SCROLL_TO_BOTTOM,
         CanonicalIntent.GO_BACK,
         CanonicalIntent.GO_FORWARD,
+        CanonicalIntent.OPEN_NEW_TAB,
         CanonicalIntent.NEXT_TAB,
         CanonicalIntent.PREVIOUS_TAB,
         CanonicalIntent.SWITCH_TAB,
@@ -142,7 +144,16 @@ def structured_action_to_browser_plan(action: StructuredAction) -> Any:
         return BrowserActionPlan(action_type=ActionType.SWITCH_TAB, query="previous", raw_prompt=raw)
 
     if action.intent == CanonicalIntent.OPEN_NEW_TAB:
-        return BrowserActionPlan(action_type=ActionType.OPEN_SITE, target_url="chrome://newtab/", raw_prompt=raw)
+        browser = params.get("browser")
+        meta = {"new_tab": True}
+        if browser:
+            meta["browser"] = browser
+        return BrowserActionPlan(
+            action_type=ActionType.OPEN_NEW_TAB,
+            target_url="chrome://newtab/",
+            metadata=meta,
+            raw_prompt=raw,
+        )
 
     if action.intent == CanonicalIntent.CLOSE_CURRENT_TAB:
         return BrowserActionPlan(action_type=ActionType.CLOSE_TAB, raw_prompt=raw)
@@ -193,6 +204,16 @@ def structured_action_to_browser_plan(action: StructuredAction) -> Any:
             platform=Platform.GENERIC,
             target_url=url,
             metadata={"site_key": entity},
+            raw_prompt=raw,
+        )
+
+    if action.intent == CanonicalIntent.SEARCH_CURRENT_TAB:
+        q = params.get("query", "")
+        return BrowserActionPlan(
+            action_type=ActionType.SEARCH_CURRENT_TAB,
+            platform=Platform.GENERIC,
+            query=q,
+            metadata={"target": "current_tab", "reference": params.get("reference", "this_tab")},
             raw_prompt=raw,
         )
 

@@ -190,12 +190,70 @@ class GenericSiteSkill(BaseSiteSkill):
         sessions: BrowserSessionManager,
     ) -> BrowserResult:
         """Open trusted site, direct URL, or perform discovery for unknown entities."""
+        plat = plan.platform.value if hasattr(plan.platform, "value") else str(plan.platform or "")
         platform_key = (
             plan.metadata.get("site_key")
-            or plan.platform.value
+            or plat
             or ""
         ).lower().strip()
         query = (plan.query or "").strip()
+
+        # 0A. Open Dedicated New Tab
+        if plan.action_type == ActionType.OPEN_NEW_TAB:
+            target_url = plan.target_url or "chrome://newtab/"
+            success, tab_idx, title, final_url = engine.open_new_tab(target_url)
+            spoken = "Opened a new tab, Boss."
+            try:
+                from core.context import recent_interaction_context
+                recent_interaction_context.record_tab_opened(
+                    browser=getattr(engine, "_app_name", "Google Chrome"),
+                    index=tab_idx,
+                    title=title,
+                    url=final_url,
+                )
+            except Exception:
+                pass
+            environment_observer.update_action_context(
+                action="OPEN_NEW_TAB",
+                opened_target=final_url,
+            )
+            return BrowserResult(
+                success=success,
+                action_type=plan.action_type,
+                message=f"Opened a new tab #{tab_idx} in {getattr(engine, '_app_name', 'browser')}.",
+                spoken_response=spoken,
+                url=final_url,
+                metadata={"tab_index": tab_idx, "title": title, "url": final_url},
+            )
+
+        # 0B. Search Current Browser Tab
+        if plan.action_type == ActionType.SEARCH_CURRENT_TAB:
+            success, tab_idx, title, final_url = engine.search_current_tab(query)
+            spoken = f"Yep, searched for {query} in that tab."
+            try:
+                from core.context import recent_interaction_context
+                recent_interaction_context.update_from_observation(
+                    tab_index=tab_idx,
+                    tab_title=title,
+                    url=final_url,
+                )
+                recent_interaction_context.last_search_query = query
+                recent_interaction_context.last_action = "SEARCH_CURRENT_TAB"
+                recent_interaction_context.last_action_status = "VERIFIED"
+            except Exception:
+                pass
+            environment_observer.update_action_context(
+                action="SEARCH_CURRENT_TAB",
+                opened_target=final_url,
+            )
+            return BrowserResult(
+                success=success,
+                action_type=plan.action_type,
+                message=f"Searched for '{query}' in active tab #{tab_idx}.",
+                spoken_response=spoken,
+                url=final_url,
+                metadata={"tab_index": tab_idx, "title": title, "url": final_url, "query": query},
+            )
 
         # 1. Close active tab
         if plan.action_type == ActionType.CLOSE_TAB:

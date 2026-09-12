@@ -116,6 +116,8 @@ class BrowserManager:
             ActionType.NAVIGATE_BACK,
             ActionType.NAVIGATE_FORWARD,
             ActionType.CLOSE_TAB,
+            ActionType.SEARCH_CURRENT_TAB,
+            ActionType.OPEN_NEW_TAB,
         ):
             try:
                 state = self.engine.refresh_browser_state()
@@ -180,7 +182,14 @@ class BrowserManager:
         from ui.health_checker import DashboardStatsManager
 
         # Record activity understanding and actions
-        if plan.action_type in (ActionType.SEARCH_WEB, ActionType.SEARCH_SITE):
+        if plan.action_type == ActionType.SEARCH_CURRENT_TAB:
+            DashboardStatsManager.record_understood("Browser Search", details={"Target": "Current Tab", "Task": "Search", "Query": plan.query})
+            DashboardStatsManager.record_action(f'Searching for "{plan.query}" in current tab')
+        elif plan.action_type == ActionType.OPEN_NEW_TAB:
+            browser_name = plan.metadata.get("browser", "Chrome") if plan.metadata else "Chrome"
+            DashboardStatsManager.record_understood("Open New Tab", details={"Browser": browser_name})
+            DashboardStatsManager.record_action("Opening new browser tab")
+        elif plan.action_type in (ActionType.SEARCH_WEB, ActionType.SEARCH_SITE):
             site_name = (plan.platform.value if plan.platform else "web").title()
             DashboardStatsManager.record_understood("Browser Task", details={"Website": site_name, "Task": "Search", "Query": plan.query})
             DashboardStatsManager.record_action(f"Opening {site_name}")

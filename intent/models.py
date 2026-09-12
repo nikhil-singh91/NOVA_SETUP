@@ -35,6 +35,7 @@ class CanonicalIntent(str, Enum):
 
     # Web, Media & Site Navigation
     OPEN_WEBSITE = "open_website"
+    SEARCH_CURRENT_TAB = "search_current_tab"
     SEARCH_CURRENT_SITE = "search_current_site"
     SEARCH_WEBSITE = "search_website"
     SEARCH_WEB = "search_web"

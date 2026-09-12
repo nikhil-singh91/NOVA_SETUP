@@ -15,7 +15,12 @@ logger = get_logger(__name__)
 class LinguisticIntentMatcher:
     """Matches normalized user text against generalized linguistic patterns and extracts entities."""
 
-    def match(self, norm: NormalizedInput | str) -> StructuredAction | None:
+    def match(
+        self,
+        norm: NormalizedInput | str,
+        context: Any | None = None,
+        screen_state: Any | None = None,
+    ) -> StructuredAction | None:
         """Attempt deterministic and paraphrase matching on normalized input."""
         if isinstance(norm, str):
             from intent.normalizer import TextNormalizer
@@ -129,13 +134,13 @@ class LinguisticIntentMatcher:
         if res:
             return res
 
-        # 9. In-Site Search & Current Site Search ("In Flipkart search mobile phones", "Search iPhone here")
-        res = self._match_in_site_search(txt, raw, clean_text)
+        # 9. In-Site Search & Current Site Search ("In Flipkart search mobile phones", "In this new tab search for mobile phones")
+        res = self._match_in_site_search(txt, raw, clean_text, context=context, screen_state=screen_state)
         if res:
             return res
 
         # 10. Tab Navigation (Next, Previous, New, Switch, Close)
-        res = self._match_tab_commands(txt, raw, clean_text)
+        res = self._match_tab_commands(txt, raw, clean_text, context=context, screen_state=screen_state)
         if res:
             return res
 
@@ -149,8 +154,8 @@ class LinguisticIntentMatcher:
         if res:
             return res
 
-        # 13. Ordinal Result Selection ("Open the second one")
-        res = self._match_ordinal_selection(txt, raw, clean_text)
+        # 13. Ordinal Result Selection ("Open the second one", "open that one")
+        res = self._match_ordinal_selection(txt, raw, clean_text, context=context, screen_state=screen_state)
         if res:
             return res
 
@@ -1368,8 +1373,77 @@ class LinguisticIntentMatcher:
 
         return None
 
-    def _match_in_site_search(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
-        # 1. Multi-Action: Open Site/App and Search Query
+    def _match_in_site_search(
+        self,
+        txt: str,
+        raw: str,
+        norm_text: str,
+        context: Any | None = None,
+        screen_state: Any | None = None,
+    ) -> StructuredAction | None:
+        # 1. Contextual Browser Tab Search:
+        # "In this new tab, search for mobile phones"
+        # "In this tab search for mobile phones"
+        # "In the new tab search for mobile phones"
+        # "In that tab search for mobile phones"
+        # "On this new tab search for phones"
+        m_tab_search = re.search(
+            r"^(?:in|on)\s+(?:this|the|that)\s+(?:new\s+)?tab(?:,\s*|\s+)(?:please\s+)?(?:search\s+(?:for\s+|in\s+)?|find\s+(?:for\s+)?|look\s+up\s+)(.+)$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_tab_search:
+            q = m_tab_search.group(1).strip()
+            q = re.sub(r"^(?:for\s+|about\s+)", "", q).strip()
+            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q).strip()
+            if q:
+                return StructuredAction(
+                    intent=CanonicalIntent.SEARCH_CURRENT_TAB,
+                    confidence=0.98,
+                    parameters={"target": "current_tab", "query": q, "reference": "this_tab"},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # "Search for mobile phones in this new tab" / "Search mobile phones in this tab"
+        m_search_in_tab = re.search(
+            r"^(?:search\s+(?:for\s+)?|find\s+|look\s+up\s+)(.+?)\s+(?:in|on)\s+(?:this|the|that)\s+(?:new\s+)?tab$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_search_in_tab:
+            q = m_search_in_tab.group(1).strip()
+            q = re.sub(r"^(?:for\s+|about\s+)", "", q).strip()
+            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q).strip()
+            if q:
+                return StructuredAction(
+                    intent=CanonicalIntent.SEARCH_CURRENT_TAB,
+                    confidence=0.98,
+                    parameters={"target": "current_tab", "query": q, "reference": "this_tab"},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # "Search this tab for mobile phones" / "Search in this tab for mobile phones"
+        m_search_tab_for = re.search(
+            r"^(?:search|find|look\s+up)\s+(?:in\s+)?(?:this|the|that)\s+(?:new\s+)?tab\s+(?:for\s+)?(.+)$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_search_tab_for:
+            q = m_search_tab_for.group(1).strip()
+            q = re.sub(r"^(?:for\s+|about\s+)", "", q).strip()
+            q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q).strip()
+            if q:
+                return StructuredAction(
+                    intent=CanonicalIntent.SEARCH_CURRENT_TAB,
+                    confidence=0.98,
+                    parameters={"target": "current_tab", "query": q, "reference": "this_tab"},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # 2. Multi-Action: Open Site/App and Search Query
         # "Go to Flipkart website and search for mobile phones"
         # "Open Google and search DSA roadmap"
         # "Open Amazon and search for headphones"
@@ -1384,7 +1458,7 @@ class LinguisticIntentMatcher:
             q = m_open_search.group(2).strip()
             q = re.sub(r"^(?:for\s+|about\s+)", "", q).strip()
             q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q).strip()
-            if site and q:
+            if site and q and site.lower() not in ("tab", "new tab", "this"):
                 return StructuredAction(
                     intent=CanonicalIntent.SEARCH_WEBSITE,
                     confidence=0.98,
@@ -1393,31 +1467,33 @@ class LinguisticIntentMatcher:
                     normalized_input=norm_text,
                 )
 
-        # 2. In-Site Search
+        # 3. In-Site Search: "In Flipkart search mobile phones"
         m_in = re.search(r"^in\s+(?:the\s+)?([a-zA-Z0-9_\-\.]+?)(?:\s+website|\s+site|\s+app)?\s+(?:search\s+(?:for\s+)?|find\s+(?:for\s+)?)(.+)$", txt)
         if m_in:
             site = m_in.group(1).strip()
             q = m_in.group(2).strip()
             q = re.sub(r"^(?:for\s+|about\s+)", "", q).strip()
-            return StructuredAction(
-                intent=CanonicalIntent.SEARCH_WEBSITE,
-                confidence=0.98,
-                parameters={"site": site, "query": q},
-                raw_input=raw,
-                normalized_input=norm_text,
-            )
+            if site and q and site.lower() not in ("this", "that", "the", "new", "tab", "new tab"):
+                return StructuredAction(
+                    intent=CanonicalIntent.SEARCH_WEBSITE,
+                    confidence=0.98,
+                    parameters={"site": site, "query": q},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
 
         m_search_in = re.search(r"^(?:search|find)\s+(?:for\s+)?(.+?)\s+in\s+(?:the\s+)?([a-zA-Z0-9_\-\.]+?)(?:\s+website|\s+site|\s+app)?$", txt)
         if m_search_in:
             q = m_search_in.group(1).strip()
             site = m_search_in.group(2).strip()
-            return StructuredAction(
-                intent=CanonicalIntent.SEARCH_WEBSITE,
-                confidence=0.98,
-                parameters={"site": site, "query": q},
-                raw_input=raw,
-                normalized_input=norm_text,
-            )
+            if site and q and site.lower() not in ("this", "that", "the", "new", "tab", "new tab"):
+                return StructuredAction(
+                    intent=CanonicalIntent.SEARCH_WEBSITE,
+                    confidence=0.98,
+                    parameters={"site": site, "query": q},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
 
         m_here = re.search(r"^(?:search|find)\s+(?:for\s+)?(.+?)\s+(?:here|on\s+this\s+site|on\s+this\s+page)$", txt)
         if m_here:
@@ -1430,9 +1506,39 @@ class LinguisticIntentMatcher:
                 normalized_input=norm_text,
             )
 
+        # 4. Contextual Follow-up Search when browser is active or recently searched:
+        # "now search for laptops", "search for laptops instead", "search for phones"
+        m_follow = re.search(r"^(?:now\s+)?(?:search\s+for|look\s+up|find)\s+(.+?)(?:\s+instead)?$", txt, re.IGNORECASE)
+        if m_follow:
+            is_browser_active = False
+            if context and (context.current_browser or context.last_opened_tab or context.last_search_query):
+                is_browser_active = True
+            elif screen_state and hasattr(screen_state, "active_application") and screen_state.active_application:
+                if any(b in screen_state.active_application.lower() for b in ["chrome", "safari", "brave", "edge"]):
+                    is_browser_active = True
+
+            if is_browser_active:
+                q = m_follow.group(1).strip()
+                q = re.sub(r"\s+(?:for\s+me|please|kripya|now|instead)$", "", q).strip()
+                if q and q not in ("tab", "tabs", "folder", "camera", "photo", "recording", "it", "this", "that"):
+                    return StructuredAction(
+                        intent=CanonicalIntent.SEARCH_CURRENT_TAB,
+                        confidence=0.96,
+                        parameters={"target": "current_tab", "query": q, "reference": "active_browser"},
+                        raw_input=raw,
+                        normalized_input=norm_text,
+                    )
+
         return None
 
-    def _match_tab_commands(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
+    def _match_tab_commands(
+        self,
+        txt: str,
+        raw: str,
+        norm_text: str,
+        context: Any | None = None,
+        screen_state: Any | None = None,
+    ) -> StructuredAction | None:
         # NEXT TAB
         pat_next = r"^(?:go\s+to\s+|switch\s+to\s+|move\s+to\s+|show\s+(?:me\s+)?|open\s+|take\s+me\s+(?:back\s+)?to\s+)?(?:the\s+)?next\s+tab$"
         if re.search(pat_next, txt) or txt in ["next tab", "agla tab", "next tab pe jao"]:
@@ -1455,12 +1561,24 @@ class LinguisticIntentMatcher:
                 normalized_input=norm_text,
             )
 
-        # OPEN NEW TAB
-        pat_new = r"^(?:open\s+(?:a\s+|the\s+|another\s+)?|create\s+(?:a\s+|the\s+)?|make\s+(?:a\s+|the\s+)?|launch\s+(?:a\s+|the\s+)?)?(?:new\s+tab|another\s+tab)$"
-        if re.search(pat_new, txt) or txt in ["open new tab", "new tab please", "new tab", "create new tab", "make a new tab", "open another tab", "can you open a new tab", "open a new tab"]:
+        # OPEN NEW TAB ("open a new tab", "open a Chrome new tab", "open new tab in Chrome")
+        pat_new = r"^(?:open\s+(?:a\s+|the\s+|another\s+)?|create\s+(?:a\s+|the\s+)?|make\s+(?:a\s+|the\s+)?|launch\s+(?:a\s+|the\s+)?)?(?:([a-zA-Z0-9_\-]+)\s+)?(?:new\s+tab|another\s+tab)(?:\s+in\s+([a-zA-Z0-9_\-]+))?$"
+        m_new = re.search(pat_new, txt)
+        if m_new or txt in ["open new tab", "new tab please", "new tab", "create new tab", "make a new tab", "open another tab", "can you open a new tab", "open a new tab", "open a chrome new tab"]:
+            browser_name = None
+            if m_new:
+                b_cand = (m_new.group(1) or m_new.group(2) or "").strip().lower()
+                if b_cand in ["chrome", "safari", "brave", "edge", "arc", "firefox"]:
+                    browser_name = b_cand.title()
+            params = {}
+            if browser_name:
+                params["browser"] = browser_name
+            elif context and getattr(context, "current_browser", None):
+                params["browser"] = context.current_browser
             return StructuredAction(
                 intent=CanonicalIntent.OPEN_NEW_TAB,
                 confidence=0.98,
+                parameters=params,
                 raw_input=raw,
                 normalized_input=norm_text,
             )
@@ -1503,41 +1621,41 @@ class LinguisticIntentMatcher:
                 normalized_input=norm_text,
             )
 
+        if txt in ["explain this page", "explain page", "explain what is on this page", "explain this"]:
+            return StructuredAction(
+                intent=CanonicalIntent.EXPLAIN_PAGE,
+                confidence=0.98,
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
         return None
 
     def _match_scrolling_and_history(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
-        # 1. Scroll to Bottom
-        pat_bottom = (
-            r"^(?:scroll\s+(?:all\s+the\s+way\s+)?(?:to\s+(?:the\s+)?)?bottom|"
-            r"scroll\s+to\s+(?:the\s+)?end|"
-            r"go\s+to\s+(?:the\s+)?bottom|"
-            r"take\s+me\s+to\s+(?:the\s+)?bottom|"
-            r"scroll\s+all\s+the\s+way\s+down|"
-            r"scroll\s+to\s+(?:the\s+)?bottom\s+of\s+(?:the\s+)?(?:page|screen)|"
-            r"bottom)$"
-        )
-        if re.search(pat_bottom, txt) or txt in ["scroll to the bottom", "scroll to bottom", "go to bottom", "scroll all the way down", "take me to the bottom"]:
+        # SCROLL TO BOTTOM
+        bottom_patterns = [
+            "scroll to bottom", "scroll to the bottom", "go to bottom",
+            "go to the bottom", "scroll all the way down", "take me to the bottom",
+            "bottom of page", "niche scroll karo", "bottom pe jao",
+        ]
+        if any(txt == p for p in bottom_patterns) or re.search(r"^(?:scroll|go|take\s+me)\s+(?:all\s+the\s+way\s+)?(?:to\s+)?(?:the\s+)?bottom$", txt):
             return StructuredAction(intent=CanonicalIntent.SCROLL_TO_BOTTOM, confidence=0.98, raw_input=raw, normalized_input=norm_text)
 
-        # 2. Scroll to Top
-        pat_top = (
-            r"^(?:scroll\s+(?:all\s+the\s+way\s+)?(?:to\s+(?:the\s+)?)?top|"
-            r"scroll\s+to\s+(?:the\s+)?(?:start|beginning)|"
-            r"go\s+to\s+(?:the\s+)?top|"
-            r"take\s+me\s+to\s+(?:the\s+)?top|"
-            r"scroll\s+all\s+the\s+way\s+up|"
-            r"scroll\s+to\s+(?:the\s+)?top\s+of\s+(?:the\s+)?(?:page|screen)|"
-            r"top)$"
-        )
-        if re.search(pat_top, txt) or txt in ["scroll to the top", "scroll to top", "go to top", "scroll all the way up", "take me to the top"]:
+        # SCROLL TO TOP
+        top_patterns = [
+            "scroll to top", "scroll to the top", "go to top",
+            "go to the top", "scroll all the way up", "take me to the top",
+            "top of page", "scroll top", "top pe jao",
+        ]
+        if any(txt == p for p in top_patterns) or re.search(r"^(?:scroll|go|take\s+me)\s+(?:all\s+the\s+way\s+)?(?:to\s+)?(?:the\s+)?top$", txt):
             return StructuredAction(intent=CanonicalIntent.SCROLL_TO_TOP, confidence=0.98, raw_input=raw, normalized_input=norm_text)
 
-        # 3. Scroll Down
-        pat_down = r"^(?:scroll\s+(?:the\s+page\s+|the\s+screen\s+)?down|scroll\s+down(?:\s+the\s+page|\s+the\s+screen)?|go\s+down|move\s+down|show\s+more|take\s+me\s+lower|scroll\s+a\s+little\s+down|scroll\s+down)$"
-        if re.search(pat_down, txt) or txt in ["scroll down", "down", "neeche scroll karo"]:
+        # SCROLL DOWN
+        pat_down = r"^(?:scroll\s+(?:the\s+page\s+|the\s+screen\s+)?down|scroll\s+down(?:\s+the\s+page|\s+the\s+screen)?|go\s+down|move\s+down|take\s+me\s+lower|show\s+more(?:\s+results)?|scroll\s+a\s+little(?:\s+down)?|scroll\s+down)$"
+        if re.search(pat_down, txt) or txt in ["scroll down", "down", "niche scroll karo", "scroll", "show more", "take me lower"]:
             return StructuredAction(intent=CanonicalIntent.SCROLL_DOWN, confidence=0.98, raw_input=raw, normalized_input=norm_text)
 
-        # 4. Scroll Up
+        # SCROLL UP
         pat_up = r"^(?:scroll\s+(?:the\s+page\s+|the\s+screen\s+)?up|scroll\s+up(?:\s+the\s+page|\s+the\s+screen)?|go\s+up|move\s+up|show\s+previous\s+section|scroll\s+a\s+little\s+up|scroll\s+up)$"
         if re.search(pat_up, txt) or txt in ["scroll up", "up", "upar scroll karo"]:
             return StructuredAction(intent=CanonicalIntent.SCROLL_UP, confidence=0.98, raw_input=raw, normalized_input=norm_text)
@@ -1550,7 +1668,14 @@ class LinguisticIntentMatcher:
 
         return None
 
-    def _match_ordinal_selection(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
+    def _match_ordinal_selection(
+        self,
+        txt: str,
+        raw: str,
+        norm_text: str,
+        context: Any | None = None,
+        screen_state: Any | None = None,
+    ) -> StructuredAction | None:
         m = re.search(r"^(?:open|click|select)\s+(?:the\s+)?(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)(?:\s+one|\s+result|\s+link)?$", txt)
         if m:
             ord_map = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
@@ -1559,6 +1684,16 @@ class LinguisticIntentMatcher:
                 intent=CanonicalIntent.OPEN_RESULT,
                 confidence=0.98,
                 parameters={"target_index": idx},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # Contextual Reference Selection ("open that one", "open this one", "click that one", "open this result")
+        if re.search(r"^(?:open|click|select)\s+(?:that\s+one|this\s+one|that|this)(?:\s+result|\s+link)?$", txt):
+            return StructuredAction(
+                intent=CanonicalIntent.OPEN_RESULT,
+                confidence=0.95,
+                parameters={"target_index": 1, "use_context": True},
                 raw_input=raw,
                 normalized_input=norm_text,
             )
@@ -1897,7 +2032,7 @@ class LinguisticIntentMatcher:
                 entity = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", entity).strip()
                 entity = re.sub(r"^the\s+", "", entity).strip()
 
-                if entity and entity not in ("new tab", "tab", "page", "browser", "it", "this", "app", "application", "folder", "camera", "screenshot"):
+                if entity and entity not in ("new tab", "tab", "page", "browser", "it", "this", "app", "application", "folder", "camera", "screenshot", "bottom", "top"):
                     return StructuredAction(
                         intent=CanonicalIntent.OPEN_WEBSITE,
                         confidence=0.95,

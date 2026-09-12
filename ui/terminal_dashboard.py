@@ -656,6 +656,22 @@ class TerminalDashboard:
                             formatted_lines.append(body)
                             formatted_lines.append(Text(""))
 
+                        # 2B. RESOLVE (Contextual Reference Resolution)
+                        elif cat == "RESOLVE":
+                            header = Text()
+                            header.append(time_prefix, style="dim cyan")
+                            header.append("RESOLVE", style="bold cyan")
+                            formatted_lines.append(header)
+
+                            body = Text()
+                            body.append(f"Target: {step.text}\n", style="white")
+                            if step.details:
+                                for k, v in step.details.items():
+                                    body.append(f"{k}: {v}\n", style="dim white")
+                            body.rstrip()
+                            formatted_lines.append(body)
+                            formatted_lines.append(Text(""))
+
                         # 3. ACTION
                         elif cat == "ACTION":
                             header = Text()

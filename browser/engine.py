@@ -138,6 +138,31 @@ class BaseBrowserEngine(ABC):
     def extract_search_results(self, limit: int = 5) -> list[dict[str, str]]:
         """Extract organic search results from active search results page."""
 
+    def open_new_tab(self, url: str = "chrome://newtab/") -> tuple[bool, int, str, str]:
+        """Open a new tab and return (success, tab_index, title, url)."""
+        succ = self.open_url(url, new_tab=True)
+        st = self.refresh_browser_state()
+        return succ, st.get("active_tab", 1), st.get("title", ""), st.get("url", url)
+
+    def search_current_tab(self, query: str) -> tuple[bool, int, str, str]:
+        """Search query directly in the current frontmost tab and return (success, tab_index, title, url)."""
+        import urllib.parse
+        st = self.refresh_browser_state()
+        cur_url = st.get("url", "").lower()
+        encoded = urllib.parse.quote_plus(query)
+        if "flipkart.com" in cur_url:
+            search_url = f"https://www.flipkart.com/search?q={encoded}"
+        elif "amazon" in cur_url:
+            search_url = f"https://www.amazon.in/s?k={encoded}"
+        elif "youtube.com" in cur_url:
+            search_url = f"https://www.youtube.com/results?search_query={encoded}"
+        else:
+            search_url = f"https://www.google.com/search?q={encoded}"
+        succ = self.open_url(search_url, new_tab=False)
+        time.sleep(0.3)
+        nst = self.refresh_browser_state()
+        return succ, nst.get("active_tab", 1), nst.get("title", ""), nst.get("url", search_url)
+
     @abstractmethod
     def shutdown(self) -> None:
         """Cleanly close automation sessions."""
@@ -531,6 +556,50 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
         res = self.execute_script(js)
         log_browser_diagnostics("NAVIGATE_FORWARD", "SUCCESS")
         return True
+
+    def open_new_tab(self, url: str = "chrome://newtab/") -> tuple[bool, int, str, str]:
+        """Open a dedicated new browser tab and return verified tab state."""
+        clean_url = url.strip()
+        if not clean_url.startswith("http://") and not clean_url.startswith("https://") and not clean_url.startswith("chrome://"):
+            clean_url = f"https://{clean_url}"
+
+        logger.info("Opening new tab in %s: %s", self._app_name, clean_url)
+        success = self.open_url(clean_url, new_tab=True)
+        time.sleep(0.3)
+        state = self.refresh_browser_state()
+        idx = state.get("active_tab", 1)
+        title = state.get("title", "New Tab")
+        cur_url = state.get("url", clean_url)
+        log_browser_diagnostics("OPEN_NEW_TAB", "SUCCESS" if success else "FAILED", tab_idx=idx, title=title, url=cur_url)
+        return success, idx, title, cur_url
+
+    def search_current_tab(self, query: str) -> tuple[bool, int, str, str]:
+        """Search for a query directly inside the active browser tab without opening a new tab."""
+        import urllib.parse
+        state = self.refresh_browser_state()
+        cur_url = (state.get("url") or "").lower()
+        encoded = urllib.parse.quote_plus(query.strip())
+
+        if "flipkart.com" in cur_url:
+            search_url = f"https://www.flipkart.com/search?q={encoded}"
+        elif "amazon" in cur_url:
+            search_url = f"https://www.amazon.in/s?k={encoded}"
+        elif "youtube.com" in cur_url:
+            search_url = f"https://www.youtube.com/results?search_query={encoded}"
+        elif "github.com" in cur_url:
+            search_url = f"https://github.com/search?q={encoded}"
+        else:
+            search_url = f"https://www.google.com/search?q={encoded}"
+
+        logger.info("Searching current tab in %s: %s -> %s", self._app_name, query, search_url)
+        success = self.open_url(search_url, new_tab=False)
+        time.sleep(0.35)
+        new_state = self.refresh_browser_state()
+        idx = new_state.get("active_tab", 1)
+        title = new_state.get("title", f"{query} - Search")
+        new_url = new_state.get("url", search_url)
+        log_browser_diagnostics("SEARCH_CURRENT_TAB", "SUCCESS" if success else "FAILED", query=query, url=new_url, tab_idx=idx)
+        return success, idx, title, new_url
 
     def scroll_page(self, direction: str = "down", amount: str | int = "medium") -> bool:
         """Scroll the active browser window smoothly via native Quartz CGEvent."""

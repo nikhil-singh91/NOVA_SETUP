@@ -20,6 +20,7 @@ from pathlib import Path
 
 from config.settings import settings
 from core.computer_agent import ComputerAgent, computer_agent
+from core.context import recent_interaction_context
 from core.environment import ContextResolver, EnvironmentObserver, environment_observer, log_environment_debug
 from core.event_bus import EventBus, EventHandler, NovaEvent
 from core.exceptions import MemorySystemError as NovaMemoryError
@@ -121,6 +122,7 @@ class NovaApplication:
         self.task_executor: TaskExecutor = task_executor
         self.active_task_context: TaskContext = TaskContext(task_id="global_turn_context")
         self.environment_observer: EnvironmentObserver = environment_observer
+        self.recent_context = recent_interaction_context
         self.screen_recording_manager: ScreenRecordingManager = screen_recording_manager
         self.intent_engine: NaturalLanguageIntentEngine = NaturalLanguageIntentEngine()
 
@@ -705,9 +707,33 @@ class NovaApplication:
             if user_text not in candidates:
                 candidates.insert(0, user_text)
 
-            structured_action = self.intent_engine.parse(user_text, allow_ai_fallback=False, candidates=candidates)
+            # Retrieve real-time Eyes / screen state if available
+            eyes_state = None
+            if hasattr(self, "computer_agent") and hasattr(self.computer_agent, "eyes"):
+                try:
+                    eyes_state = self.computer_agent.eyes.get_latest_state()
+                except Exception:
+                    eyes_state = None
+
+            structured_action = self.intent_engine.parse(
+                user_text,
+                allow_ai_fallback=False,
+                candidates=candidates,
+                context=self.recent_context,
+                screen_state=eyes_state,
+            )
             norm_text = structured_action.normalized_input or user_text
             routing_domain = get_routing_domain(structured_action.intent)
+
+            # Record Contextual Resolution if reference/target is present
+            if "reference" in structured_action.parameters or "target" in structured_action.parameters:
+                ref_label = structured_action.parameters.get("reference") or structured_action.parameters.get("target")
+                resolved = self.recent_context.resolve_reference(str(ref_label))
+                if resolved:
+                    DashboardStatsManager.record_resolve(
+                        target=f"{resolved.app_name or 'Current Browser'} tab: {resolved.title or resolved.url or 'Active'}",
+                        details={"entity_type": resolved.entity_type, "confidence": resolved.confidence},
+                    )
 
             # 3A. Cancellation Actions ("Stop", "Cancel", "Never mind")
             if structured_action.intent == CanonicalIntent.CANCEL_ACTION:
@@ -908,9 +934,34 @@ class NovaApplication:
 
             # 4. Domain-Aware Subsystem Dispatch
             if routing_domain == RoutingDomain.BROWSER:
-                browser_result = self.browser_manager.execute_command(norm_text) or self.browser_manager.execute_command(user_text)
-                if browser_result is not None:
-                    self._deliver_response(browser_result.spoken_response, turn_id)
+                from intent.router import structured_action_to_browser_plan
+                plan = structured_action_to_browser_plan(structured_action)
+                if plan:
+                    res = self.browser_manager.execute_plan(plan)
+                else:
+                    res = self.browser_manager.execute_command(norm_text) or self.browser_manager.execute_command(user_text)
+
+                if res is not None:
+                    # Update recent interaction context with verified outcome
+                    res_meta = getattr(res, "metadata", {}) or {}
+                    res_url = getattr(res, "url", None) or res_meta.get("url")
+                    res_title = res_meta.get("title")
+                    res_msg = getattr(res, "message", "executed")
+                    res_success = getattr(res, "success", True)
+                    self.recent_context.add_turn(
+                        user_input=user_text,
+                        intent=structured_action.intent.value,
+                        action=plan.action.value if plan else "browser_action",
+                        action_result=res_msg,
+                        success=res_success,
+                        target_app="Google Chrome",
+                        target_browser="Google Chrome",
+                        current_url=res_url,
+                        current_title=res_title,
+                    )
+                    from personality.response_orchestrator import ResponseOrchestrator
+                    orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
+                    self._deliver_orchestrated_response(orch, turn_id)
                     return
                 # Scrolling fallback if browser command did not handle directly
                 if structured_action.intent in (CanonicalIntent.SCROLL_DOWN, CanonicalIntent.SCROLL_UP, CanonicalIntent.SCROLL_TO_TOP, CanonicalIntent.SCROLL_TO_BOTTOM):
@@ -956,6 +1007,18 @@ class NovaApplication:
                     if success:
                         DashboardStatsManager.record_verify(f"{app_name} opened and active", success=True)
                         DashboardStatsManager.record_result(f"{app_name} launched successfully.", success=True)
+                        self.recent_context.add_turn(
+                            user_input=user_text,
+                            intent="launch_app",
+                            action="open_application",
+                            action_result=f"Opened {app_name}",
+                            success=True,
+                            target_app=app_name,
+                        )
+                        if "chrome" in app_name.lower():
+                            self.recent_context.update_browser_state(browser_name="Google Chrome", app_name="Google Chrome")
+                        elif "safari" in app_name.lower():
+                            self.recent_context.update_browser_state(browser_name="Safari", app_name="Safari")
                         try:
                             if hasattr(self, "active_task_context") and self.active_task_context:
                                 if hasattr(self.active_task_context, "register_application"):
@@ -986,6 +1049,14 @@ class NovaApplication:
                     lat_ms = (time.monotonic() - start_t) * 1000
                     if success:
                         DashboardStatsManager.record_result(f"✓ {app_name} closed", success=True)
+                        self.recent_context.add_turn(
+                            user_input=user_text,
+                            intent="close_app",
+                            action="close_application",
+                            action_result=f"Closed {app_name}",
+                            success=True,
+                            target_app=None,
+                        )
                     else:
                         DashboardStatsManager.record_result(f"✗ Failed to close {app_name}: {msg}", success=False)
                     DashboardStatsManager.record_mac_action(

@@ -321,6 +321,46 @@ class CapabilityRegistry:
             )
         )
 
+        # 8B. Browser: Open New Tab
+        def _exec_open_new_tab(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+            from browser.engine import MacOSNativeBrowserEngine
+            eng = MacOSNativeBrowserEngine()
+            browser = params.get("browser", "Chrome")
+            state = eng.open_new_tab(browser=browser)
+            if state:
+                return {"success": True, "browser": browser, "url": state.url, "tab_id": state.tab_id}
+            return {"success": False, "error": f"Failed to open new tab in {browser}."}
+
+        self.register(
+            CapabilityDefinition(
+                name="browser.open_new_tab",
+                subsystem="browser",
+                description="Open a new tab in Google Chrome or Safari.",
+                risk_level=RiskLevel.LOW,
+                handler=_exec_open_new_tab,
+            )
+        )
+
+        # 8C. Browser: Search Current Tab
+        def _exec_search_current_tab(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+            from browser.engine import MacOSNativeBrowserEngine
+            eng = MacOSNativeBrowserEngine()
+            query = params.get("query", "")
+            state = eng.search_current_tab(query=query)
+            if state:
+                return {"success": True, "query": query, "url": state.url, "title": state.title}
+            return {"success": False, "error": f"Failed to search for '{query}' in current tab."}
+
+        self.register(
+            CapabilityDefinition(
+                name="browser.search_current_tab",
+                subsystem="browser",
+                description="Search for a query directly inside the active/current browser tab.",
+                risk_level=RiskLevel.LOW,
+                handler=_exec_search_current_tab,
+            )
+        )
+
         # 9. Visual Interaction: Click UI Element
         def _exec_visual_click(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
             from core.computer_agent import computer_agent

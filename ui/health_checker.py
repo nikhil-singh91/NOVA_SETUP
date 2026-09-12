@@ -607,6 +607,43 @@ class DashboardStatsManager:
                 pass
 
     @classmethod
+    def record_resolve(
+        cls,
+        target: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Record contextual reference resolution step."""
+        ts = time.time()
+        step = ActivityStep(
+            category="RESOLVE",
+            text=target,
+            timestamp=ts,
+            details=dict(details or {}),
+        )
+
+        with cls._lock:
+            inter = cls._current_interaction
+            if inter is not None:
+                inter.steps.append(step)
+            else:
+                inter = ActivityInteraction(
+                    interaction_id=f"turn_{int(ts * 1000)}",
+                    timestamp=ts,
+                    steps=[step],
+                )
+                cls._interactions.append(inter)
+                cls._current_interaction = inter
+
+            cls._all_steps.append(step)
+            callbacks = list(cls._activity_callbacks)
+
+        for cb in callbacks:
+            try:
+                cb(step, inter)
+            except Exception:
+                pass
+
+    @classmethod
     def record_action(
         cls,
         action_text: str,
