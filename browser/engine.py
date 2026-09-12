@@ -17,7 +17,7 @@ from browser.models import BrowserError, BrowserLaunchError, BrowserNotFoundErro
 logger = get_logger(__name__)
 
 
-def log_browser_diagnostics(action: str, result: str, url: str = "", title: str = "", tab_idx: int | None = None, extra: str = "") -> None:
+def log_browser_diagnostics(action: str, result: str, url: str = "", title: str = "", tab_idx: int | None = None, query: str = "", extra: str = "") -> None:
     """Helper to output structured browser diagnostics when debug mode is active."""
     is_debug = bool(settings.nova_browser_debug or os.getenv("NOVA_BROWSER_DEBUG", "").lower() in ("true", "1"))
     if not is_debug:
@@ -28,6 +28,8 @@ def log_browser_diagnostics(action: str, result: str, url: str = "", title: str 
     print(f"Action:         {action}")
     if tab_idx is not None:
         print(f"Active Tab:     {tab_idx}")
+    if query:
+        print(f"Query:          {query}")
     if title:
         print(f"Page Title:     {title[:60]}")
     if url:
@@ -577,18 +579,28 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
         """Search for a query directly inside the active browser tab without opening a new tab."""
         import urllib.parse
         state = self.refresh_browser_state()
-        cur_url = (state.get("url") or "").lower()
+        cur_url = (state.get("url") or "").strip()
         encoded = urllib.parse.quote_plus(query.strip())
 
-        if "flipkart.com" in cur_url:
-            search_url = f"https://www.flipkart.com/search?q={encoded}"
-        elif "amazon" in cur_url:
-            search_url = f"https://www.amazon.in/s?k={encoded}"
-        elif "youtube.com" in cur_url:
-            search_url = f"https://www.youtube.com/results?search_query={encoded}"
-        elif "github.com" in cur_url:
-            search_url = f"https://github.com/search?q={encoded}"
-        else:
+        search_url = ""
+        try:
+            parsed = urllib.parse.urlparse(cur_url)
+            netloc = parsed.netloc.lower()
+            if netloc.startswith("www."):
+                netloc = netloc[4:]
+            domain_name = netloc.split(".")[0] if netloc else ""
+
+            from browser.sites.generic import TRUSTED_SITES
+            for site_key, site_info in TRUSTED_SITES.items():
+                site_url = site_info.get("url", "")
+                site_search = site_info.get("search_url", "")
+                if site_search and (site_key in netloc or site_key == domain_name or (site_url and urllib.parse.urlparse(site_url).netloc.lower().endswith(netloc))):
+                    search_url = site_search.format(query=encoded)
+                    break
+        except Exception as err:
+            logger.debug("Error resolving site search URL for %s: %s", cur_url, err)
+
+        if not search_url:
             search_url = f"https://www.google.com/search?q={encoded}"
 
         logger.info("Searching current tab in %s: %s -> %s", self._app_name, query, search_url)
@@ -622,9 +634,10 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
 
         try:
             import Quartz
+            CG: Any = Quartz
             for _ in range(4):
-                ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, clicks // 4 or sign)
-                Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+                ev = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitLine, 1, clicks // 4 or sign)
+                CG.CGEventPost(CG.kCGHIDEventTap, ev)
                 time.sleep(0.04)
 
             log_browser_diagnostics("SCROLL_PAGE", "SUCCESS", extra=f"direction={direction}, amount={amount}")
@@ -641,9 +654,10 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
         self._run_applescript(f'tell application "{self._app_name}" to activate')
         try:
             import Quartz
+            CG: Any = Quartz
             for _ in range(10):
-                ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, 50)
-                Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+                ev = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitLine, 1, 50)
+                CG.CGEventPost(CG.kCGHIDEventTap, ev)
                 time.sleep(0.02)
             log_browser_diagnostics("SCROLL_TO_TOP", "SUCCESS")
             return True
@@ -656,9 +670,10 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
         self._run_applescript(f'tell application "{self._app_name}" to activate')
         try:
             import Quartz
+            CG: Any = Quartz
             for _ in range(10):
-                ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, -50)
-                Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+                ev = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitLine, 1, -50)
+                CG.CGEventPost(CG.kCGHIDEventTap, ev)
                 time.sleep(0.02)
             log_browser_diagnostics("SCROLL_TO_BOTTOM", "SUCCESS")
             return True
@@ -666,12 +681,12 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
             self.execute_script("window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });")
             return True
 
-    def execute_script(self, js_code: str) -> Any:
+    def execute_script(self, script: str) -> Any:
         """Run JavaScript in the active tab (when permitted by browser)."""
-        escaped_js = js_code.replace('\\', '\\\\').replace('"', '\\"')
+        escaped_js = script.replace('\\', '\\\\').replace('"', '\\"')
 
         if "Chrome" in self._app_name or "Brave" in self._app_name or "Edge" in self._app_name:
-            script = f'''
+            osa_script = f'''
             tell application "{self._app_name}"
                 if (count of windows) > 0 then
                     tell active tab of front window
@@ -681,7 +696,7 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
             end tell
             '''
         elif "Safari" in self._app_name:
-            script = f'''
+            osa_script = f'''
             tell application "Safari"
                 if (count of windows) > 0 then
                     tell current tab of front window
@@ -693,7 +708,7 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
         else:
             return None
 
-        success, result = self._run_applescript(script)
+        success, result = self._run_applescript(osa_script)
         if success:
             try:
                 return json.loads(result)

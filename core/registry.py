@@ -36,7 +36,7 @@ Thread Safety:
 from __future__ import annotations
 
 import threading
-from typing import Final
+from typing import Any, Final
 
 from core.exceptions import NovaError
 from core.logger import get_logger
@@ -88,7 +88,7 @@ class ServiceRegistry:
             self._services[name] = service
             logger.info("Service '%s' registered (%s).", name, type(service).__name__)
 
-    def get(self, name: str) -> object:
+    def get(self, name: str) -> Any:
         """Retrieve a previously registered service instance by name.
 
         Args:

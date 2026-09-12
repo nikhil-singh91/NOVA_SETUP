@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Final
 
 from config.settings import settings
 from core.logger import get_logger

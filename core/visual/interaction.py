@@ -9,6 +9,12 @@ from typing import Any
 
 from core.environment import environment_observer
 from core.logger import get_logger
+
+try:
+    import Quartz
+    Quartz: Any = Quartz
+except ImportError:
+    Quartz = None
 from core.visual.models import (
     ScreenSnapshot,
     UIElement,
@@ -30,7 +36,8 @@ class ComputerInteractionManager:
     def validate_coordinates(self, x: int, y: int, screen_w: int = 1470, screen_h: int = 956) -> tuple[bool, int, int]:
         """Clamp coordinates and verify they lie strictly inside the active display boundaries."""
         try:
-            import Quartz
+            if not Quartz:
+                return True, x, y
             main_id = Quartz.CGMainDisplayID()
             w = int(Quartz.CGDisplayPixelsWide(main_id)) or screen_w
             h = int(Quartz.CGDisplayPixelsHigh(main_id)) or screen_h
@@ -101,7 +108,8 @@ class ComputerInteractionManager:
             return False
 
         try:
-            import Quartz
+            if not Quartz:
+                return False
 
             pt = (float(x), float(y))
 
@@ -154,7 +162,8 @@ class ComputerInteractionManager:
             return False
 
         try:
-            import Quartz
+            if not Quartz:
+                return False
             scroll_delta = -lines if direction.lower() == "down" else lines
             scroll_ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 1, scroll_delta)
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, scroll_ev)

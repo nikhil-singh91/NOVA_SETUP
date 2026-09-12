@@ -17,7 +17,7 @@ from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
 from rich.panel import Panel
-from rich.progress import ProgressBar
+from rich.progress_bar import ProgressBar
 from rich.table import Table
 from rich.text import Text
 
@@ -407,8 +407,8 @@ class TerminalDashboard:
                     p_key = prov.lower()
                     live_d = live_prov_stats.get(p_key, {})
                     diag_d = prov_spec.get(prov, {})
-                    
-                    status_lbl = (live_d.get("status") if live_d.get("status") and live_d.get("status") != "UNKNOWN" else diag_d.get("status", "UNKNOWN")).upper()
+                    status_raw = live_d.get("status") if live_d.get("status") and live_d.get("status") != "UNKNOWN" else diag_d.get("status", "UNKNOWN")
+                    status_lbl = str(status_raw or "UNKNOWN").upper()
                     lat_str = live_d.get("latency") or diag_d.get("latency", "N/A")
 
                     if status_lbl == "HEALTHY":

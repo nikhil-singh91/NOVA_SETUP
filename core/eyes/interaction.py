@@ -16,6 +16,12 @@ from core.eyes.accessibility import SemanticElement, UIElementType
 from core.eyes.capture import DisplayMetrics
 from core.logger import get_logger
 
+try:
+    import Quartz
+    Quartz: Any = Quartz
+except ImportError:
+    Quartz = None
+
 logger = get_logger(__name__)
 
 
@@ -33,8 +39,8 @@ class EyesInteractionManager:
     def validate_coordinates(self, x: int, y: int) -> tuple[bool, int, int]:
         """Validate and clamp coordinates strictly within active display boundaries."""
         # Always fetch fresh primary bounds if metrics are not configured
-        max_w = self.metrics.logical_width or 1470
-        max_h = self.metrics.logical_height or 956
+        max_w = int(self.metrics.logical_width or 1470)
+        max_h = int(self.metrics.logical_height or 956)
 
         if x < 0 or y < 0 or x >= max_w or y >= max_h:
             clamped_x = max(0, min(max_w - 1, x))
@@ -70,7 +76,8 @@ class EyesInteractionManager:
         valid, target_x, target_y = self.validate_coordinates(x, y)
 
         try:
-            import Quartz
+            if not Quartz:
+                return False
 
             if not smooth:
                 pt = (float(target_x), float(target_y))
@@ -112,7 +119,8 @@ class EyesInteractionManager:
         valid, target_x, target_y = self.validate_coordinates(x, y)
 
         try:
-            import Quartz
+            if not Quartz:
+                return False
 
             pt = (float(target_x), float(target_y))
 
@@ -170,8 +178,8 @@ class EyesInteractionManager:
         cx, cy = element.center_point
         logger.info("Targeting element '%s' (%s) at center (%d, %d)", element.label, element.element_type.value, cx, cy)
         return self.click_point(
-            cx,
-            cy,
+            int(cx),
+            int(cy),
             double_click=double_click,
             right_click=right_click,
             stop_event=stop_event,
@@ -194,7 +202,8 @@ class EyesInteractionManager:
         _, ex, ey = self.validate_coordinates(to_x, to_y)
 
         try:
-            import Quartz
+            if not Quartz:
+                return False
 
             start_pt = (float(sx), float(sy))
             end_pt = (float(ex), float(ey))
@@ -254,11 +263,12 @@ class EyesInteractionManager:
                 rx, ry = target_region.center_point
             else:
                 rx, ry = target_region
-            self.move_cursor(rx, ry, smooth=False, stop_event=stop_event)
+            self.move_cursor(int(rx), int(ry), smooth=False, stop_event=stop_event)
             time.sleep(0.05)
 
         try:
-            import Quartz
+            if not Quartz:
+                return False
 
             dir_norm = direction.lower().strip()
             # Down = negative delta in Quartz, Up = positive delta

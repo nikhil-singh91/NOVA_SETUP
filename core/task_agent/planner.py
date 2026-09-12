@@ -226,6 +226,9 @@ class TaskPlanner:
 
     def _synthesize_ai_plan(self, task_id: str, plan_id: str, request: str) -> TaskPlan | None:
         """Use ProviderManager to construct a verified TaskPlan for arbitrary multi-step goals."""
+        if not self.provider_mgr:
+            return None
+
         caps_desc = "\n".join(f"- {c.name}: {c.description} (Risk: {c.risk_level.value})" for c in self.registry.list_capabilities())
         prompt = (
             f"You are NOVA's Task Planning Brain. Break down the user's high-level goal into a valid JSON plan.\n\n"

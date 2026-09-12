@@ -188,13 +188,12 @@ class CapabilityRegistry:
         # 3. Filesystem: Move to Trash (Destructive)
         def _exec_safe_trash(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
             from desktop.files import FileSystemManager
-            fs_mgr = FileSystemManager()
             target = params.get("target_path")
             if not target:
                 return {"success": False, "error": "No target path specified for deletion."}
             p = Path(target)
-            res = fs_mgr.safe_move_to_trash(p)
-            return {"success": res.success, "path": str(p), "message": res.message}
+            success, msg = FileSystemManager.safe_move_to_trash(p)
+            return {"success": success, "path": str(p), "message": msg}
 
         def _verify_safe_trash(params: dict[str, Any], result: dict[str, Any], ctx: TaskContext) -> bool:
             p_str = result.get("path")
@@ -217,12 +216,11 @@ class CapabilityRegistry:
         # 4. Document Writing via AI
         def _exec_doc_write(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
             from desktop.editor import DocumentEditor
-            editor = DocumentEditor()
             topic = params.get("topic", "General Document")
             app_name = params.get("app_name", "TextEdit")
-            res = editor.write_and_open_document(topic=topic, app_name=app_name)
+            res = DocumentEditor.write_and_open_document(topic=topic, destination=app_name)
             if res.success:
-                doc_p = res.data.get("file_path")
+                doc_p = res.target_path or (res.metadata.get("doc_path") if res.metadata else "")
                 if doc_p:
                     ctx.register_file(Path(doc_p).name, Path(doc_p))
                 return {"success": True, "path": doc_p, "message": res.message}
@@ -240,14 +238,13 @@ class CapabilityRegistry:
 
         # 5. Application Launch
         def _exec_launch_app(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
-            from desktop.apps import ApplicationManager
-            app_mgr = ApplicationManager()
+            from desktop.apps import AppLauncher
             name = params.get("app_name", "")
-            res = app_mgr.launch_application(name)
-            if res.success:
+            success, msg, _spoken = AppLauncher.launch(name)
+            if success:
                 ctx.opened_apps.append(name)
-                return {"success": True, "app_name": name, "message": res.message}
-            return {"success": False, "error": res.message}
+                return {"success": True, "app_name": name, "message": msg}
+            return {"success": False, "error": msg}
 
         self.register(
             CapabilityDefinition(
@@ -324,11 +321,11 @@ class CapabilityRegistry:
         # 8B. Browser: Open New Tab
         def _exec_open_new_tab(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
             from browser.engine import MacOSNativeBrowserEngine
-            eng = MacOSNativeBrowserEngine()
-            browser = params.get("browser", "Chrome")
-            state = eng.open_new_tab(browser=browser)
-            if state:
-                return {"success": True, "browser": browser, "url": state.url, "tab_id": state.tab_id}
+            browser = params.get("browser", "Google Chrome")
+            eng = MacOSNativeBrowserEngine(browser=browser)
+            success, tab_idx, title, cur_url = eng.open_new_tab()
+            if success:
+                return {"success": True, "browser": browser, "url": cur_url, "tab_id": tab_idx, "title": title}
             return {"success": False, "error": f"Failed to open new tab in {browser}."}
 
         self.register(
@@ -346,9 +343,9 @@ class CapabilityRegistry:
             from browser.engine import MacOSNativeBrowserEngine
             eng = MacOSNativeBrowserEngine()
             query = params.get("query", "")
-            state = eng.search_current_tab(query=query)
-            if state:
-                return {"success": True, "query": query, "url": state.url, "title": state.title}
+            success, tab_idx, title, cur_url = eng.search_current_tab(query=query)
+            if success:
+                return {"success": True, "query": query, "url": cur_url, "title": title, "tab_id": tab_idx}
             return {"success": False, "error": f"Failed to search for '{query}' in current tab."}
 
         self.register(
@@ -432,9 +429,11 @@ class CapabilityRegistry:
         # 13. Camera: Capture Snapshot Photo
         def _exec_take_photo(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
             from desktop.camera import CameraManager
-            out_p = params.get("output_path")
-            res = CameraManager().capture_photo(output_path=Path(out_p) if out_p else None)
-            return {"success": res.success, "path": res.data.get("path") if res.data else None, "message": res.spoken_response}
+            out_p = params.get("output_path") or params.get("filename")
+            fname = Path(out_p).name if out_p else None
+            res = CameraManager().capture_photo(filename=fname)
+            photo_p = res.target_path or (res.metadata.get("path") if res.metadata else None)
+            return {"success": res.success, "path": photo_p, "message": res.spoken_response}
 
         self.register(
             CapabilityDefinition(

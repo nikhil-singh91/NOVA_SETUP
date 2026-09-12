@@ -7,12 +7,15 @@ dialogs, and scroll areas with exact logical screen geometry and state.
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from AppKit import NSWorkspace
-import ApplicationServices as AS
+import AppKit
+NSWorkspace: Any = getattr(AppKit, "NSWorkspace", None)
+import ApplicationServices
+AS: Any = ApplicationServices
 from core.logger import get_logger
 
 logger = get_logger(__name__)
