@@ -196,9 +196,19 @@ class SemanticCommandDisambiguator:
         # -------------------------------------------------------------
         # Rule 3: Music / Media Playback Disambiguation via Generalized Entity Resolution
         # -------------------------------------------------------------
-        if any(k in clean_text for k in ("song", "music", "track", "video", "baja", "bajao")):
+        generic_music_terms = {
+            "another song", "another one", "one more", "something else", "play another",
+            "play another song", "play another one", "play one more",
+            "play a song", "play some songs", "play some music", "i want to listen to some songs",
+            "i want to listen to songs", "i want to listen to music", "i feel like listening to music",
+            "play me something", "play something", "give me a song", "put some music on",
+            "koi gaana sunao", "kuch sunao", "kuch baja do", "ek aur sunao", "gaana bajao", "music chalao",
+            "ek aur bajao", "dusra gaana bajao", "dusra chalao", "kuch aur bajao", "kuch aur chalao",
+            "play songs", "songs chalao",
+        }
+        if clean_text not in generic_music_terms and not clean_text.startswith("play ") and any(k in clean_text for k in ("song", "music", "track", "video", "baja", "bajao")):
             media_query, conf = EntityResolver.extract_media_entity(clean_text)
-            if conf >= 0.80 and media_query:
+            if conf >= 0.80 and media_query and media_query.lower() not in ("another", "some", "a", "one", "another song", "something"):
                 interpreted = f"play {media_query}"
                 logger.info("Contextual Disambiguation: Interpreted '%s' as PLAY_MEDIA (Query: '%s')", raw, media_query)
                 return DisambiguationResult(

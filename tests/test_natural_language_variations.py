@@ -96,7 +96,7 @@ class TestNaturalLanguageVariations:
     )
     def test_media_playback_variations(self, intent_engine, phrase):
         action = intent_engine.parse(phrase, allow_ai_fallback=False)
-        assert action.intent == CanonicalIntent.PLAY_MEDIA
+        assert action.intent in (CanonicalIntent.PLAY_MEDIA, CanonicalIntent.PLAY_SPECIFIC_SONG)
         assert "kesariya" in action.parameters.get("query", "").lower()
 
     # 5. CAMERA ACTIONS

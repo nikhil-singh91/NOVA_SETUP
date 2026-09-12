@@ -119,8 +119,8 @@ class LinguisticIntentMatcher:
         if res:
             return res
 
-        # 6B. Media Playback & YouTube ("Play song <track>", "I want to watch <show>", "<query> bhajao")
-        res = self._match_media_playback(txt, raw, clean_text)
+        # 6B. Media Playback & YouTube ("Play song <track>", "I want to watch <show>", "<query> bhajao", "I want to listen to some songs")
+        res = self._match_media_playback(txt, raw, clean_text, context=context, screen_state=screen_state)
         if res:
             return res
 
@@ -1838,21 +1838,14 @@ class LinguisticIntentMatcher:
             )
         return None
 
-    def _match_media_playback(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
-        # Generic music requests: "play a song", "play some music", "play music", "music chalao"
-        if txt in [
-            "play a song", "play song", "play some song", "play some songs",
-            "play music", "play some music", "music chalao", "gaana bajao",
-            "gaana chalao", "songs bhajao", "song bajao", "play songs",
-        ]:
-            return StructuredAction(
-                intent=CanonicalIntent.PLAY_MEDIA,
-                confidence=0.98,
-                parameters={"platform": "youtube", "query": "Trending Music"},
-                raw_input=raw,
-                normalized_input=norm_text,
-            )
-
+    def _match_media_playback(
+        self,
+        txt: str,
+        raw: str,
+        norm_text: str,
+        context: Any | None = None,
+        screen_state: Any | None = None,
+    ) -> StructuredAction | None:
         # Conversational check guard: "listen to me", "can you listen to me", "can you hear me", "are you listening"
         if re.search(r"^(?:can\s+you\s+)?(?:listen\s+to\s+me|hear\s+me|are\s+you\s+listening)\b", txt, re.IGNORECASE) or txt in ("listen to me", "listen"):
             return None
@@ -1865,6 +1858,65 @@ class LinguisticIntentMatcher:
         if txt in ["play shorts", "open shorts", "show me shorts", "play youtube shorts", "youtube shorts", "shorts"]:
             return None
 
+        # -------------------------------------------------------------
+        # 1. Multi-turn Follow-up Music Commands ("another one", "one more", "another song", "something else")
+        # -------------------------------------------------------------
+        followup_phrases = {
+            "another one", "another song", "one more", "something else", "play another",
+            "play another song", "play another one", "play one more", "play another track",
+            "same type", "something similar", "this artist", "that artist", "this song",
+            "another song like that", "next song", "next one", "ek aur sunao", "ek aur bajao",
+            "dusra gaana bajao", "dusra chalao", "ek aur chala do", "kuch aur bajao", "kuch aur chalao",
+        }
+        if txt in followup_phrases or re.search(r"^(?:play\s+)?(?:another\s+(?:one|song|track|music)|one\s+more|something\s+else|something\s+similar)$", txt, re.I):
+            # If recent music context is fresh, or current tab was YouTube video, route as LISTEN_TO_MUSIC follow-up
+            pref_dict: dict[str, Any] = {}
+            if context and hasattr(context, "music_context"):
+                pref_dict = context.music_context.preference.model_dump()
+            return StructuredAction(
+                intent=CanonicalIntent.LISTEN_TO_MUSIC,
+                confidence=0.98,
+                parameters={
+                    "platform": "youtube",
+                    "action": "next_song",
+                    "follow_up": True,
+                    "preference": pref_dict,
+                },
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # -------------------------------------------------------------
+        # 2. Generic Music Goal / Intent: LISTEN_TO_MUSIC
+        # "I want to listen to some songs", "play me something", "play some music", "can you put on some songs"
+        # -------------------------------------------------------------
+        generic_music_exact = {
+            "i want to listen to some songs", "i want to listen to songs", "i want to listen to music",
+            "i want some music", "i feel like listening to music", "let's listen to music",
+            "lets listen to music", "play me something", "play something for me", "play something",
+            "can you put on some songs", "put on some songs", "put some music on", "give me a song",
+            "play a song", "play song", "play some song", "play some songs",
+            "play music", "play some music", "music chalao", "gaana bajao",
+            "gaana chalao", "songs bhajao", "song bajao", "play songs",
+            "kuch sunao", "koi gaana sunao", "kuch baja do", "kuch chala do",
+            "mujhe gaana sunna hai", "gaane sunne hain", "gana sunna hai",
+        }
+        if txt in generic_music_exact or re.search(r"^(?:nova\s*,?\s*)?(?:i\s+(?:want|feel\s+like)\s+(?:to\s+listen\s+to\s+)?(?:some\s+)?(?:songs|music)|(?:let\'?s\s+)?listen\s+to\s+(?:some\s+)?(?:songs|music)|(?:can\s+you\s+)?put\s+(?:on\s+)?(?:some\s+)?(?:songs|music)|play\s+(?:me\s+)?(?:something|some\s+music|some\s+songs|a\s+song)|give\s+me\s+a\s+song)(?:\s+for\s+me|\s+please)?$", txt, re.I):
+            pref_dict = {}
+            if context and hasattr(context, "music_context"):
+                pref_dict = context.music_context.preference.model_dump()
+            return StructuredAction(
+                intent=CanonicalIntent.LISTEN_TO_MUSIC,
+                confidence=0.98,
+                parameters={
+                    "platform": "youtube",
+                    "action": "listen",
+                    "preference": pref_dict,
+                },
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
         non_media_queries = frozenset({
             "me", "us", "him", "her", "them", "someone", "people", "myself",
             "what i say", "what i am saying", "this", "that", "it", "to me", "to us",
@@ -1872,7 +1924,81 @@ class LinguisticIntentMatcher:
             "search", "youtube search",
         })
 
-        # 1. Multi-Action: "Go to YouTube and play Kesariya", "Open YouTube and play song Mere Liye"
+        # -------------------------------------------------------------
+        # 3. Categorized Music Intent Extraction (Artist, Genre, Mood, Search, Specific Song)
+        # -------------------------------------------------------------
+        def _build_music_action(query_text: str, override_intent: CanonicalIntent | None = None) -> StructuredAction:
+            clean_q = query_text.strip()
+            # If query starts with "some ", strip it to check core subject
+            core_q = clean_q
+            had_some_prefix = False
+            if core_q.lower().startswith("some "):
+                core_q = core_q[5:].strip()
+                had_some_prefix = True
+
+            # Detect artist request: "Arijit Singh songs", "songs by Arijit", "some Arijit Singh"
+            m_art = re.search(r"^(.+?)(?:\s+(?:ke\s+)?(?:songs|song|gaane|gaana|music|hits))+$", core_q, re.I)
+            m_art_prefix = re.search(r"^(?:songs\s+by|music\s+by)\s+(.+)$", core_q, re.I)
+
+            genre_words = {"romantic", "sad", "party", "lofi", "lo-fi", "chill", "relaxing", "workout", "gym", "devotional", "bhajan", "ghazal", "punjabi", "hindi", "english", "bhojpuri", "pop", "rock", "classical", "jazz", "rap", "hip hop"}
+
+            words_lower = set(re.findall(r"\w+", core_q.lower()))
+
+            intent_to_use = override_intent or CanonicalIntent.PLAY_MEDIA
+            params: dict[str, Any] = {"platform": "youtube", "query": clean_q}
+
+            if override_intent is None:
+                if m_art_prefix:
+                    artist_name = m_art_prefix.group(1).strip().title()
+                    intent_to_use = CanonicalIntent.PLAY_ARTIST
+                    params["artist"] = artist_name
+                    params["query"] = f"{artist_name} songs"
+                elif words_lower & genre_words:
+                    intent_to_use = CanonicalIntent.PLAY_GENRE
+                    # Check mood vs genre
+                    if words_lower & {"romantic", "sad", "chill", "relaxing", "party", "workout"}:
+                        intent_to_use = CanonicalIntent.PLAY_MOOD
+                    params["genre_or_mood"] = clean_q
+                elif had_some_prefix and core_q:
+                    # "play some Arijit Singh" / "play some Coldplay"
+                    artist_name = core_q.title()
+                    intent_to_use = CanonicalIntent.PLAY_ARTIST
+                    params["artist"] = artist_name
+                elif m_art and not (words_lower & genre_words):
+                    artist_name = m_art.group(1).strip().title()
+                    intent_to_use = CanonicalIntent.PLAY_ARTIST
+                    params["artist"] = artist_name
+                else:
+                    intent_to_use = CanonicalIntent.PLAY_SPECIFIC_SONG
+
+            return StructuredAction(
+                intent=intent_to_use,
+                confidence=0.98,
+                parameters=params,
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # 4. Search Music Explicitly: "Search YouTube for song Kesariya", "Search music on YouTube for Arijit"
+        m_search = re.search(
+            r"^(?:search|find)\s+(?:on\s+)?(?:youtube|yt)\s+(?:for\s+)?(?:the\s+)?(?:song\s+|songs\s+|music\s+|track\s+|geet\s+|gaana\s+)(.+)$",
+            txt,
+            re.IGNORECASE,
+        )
+        m_search_music = re.search(
+            r"^(?:search|find)\s+(?:for\s+)?(?:song\s+|songs\s+|music\s+|track\s+|geet\s+|gaana\s+)(?:on\s+youtube\s+for\s+|on\s+youtube\s+)(.+)$",
+            txt,
+            re.IGNORECASE,
+        )
+        if m_search or m_search_music:
+            m_res = m_search or m_search_music
+            assert m_res is not None
+            q = m_res.group(1).strip()
+            q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
+            if q and q.lower() not in non_media_queries:
+                return _build_music_action(q, override_intent=CanonicalIntent.SEARCH_MUSIC)
+
+        # 5. Multi-Action: "Go to YouTube and play Kesariya", "Open YouTube and play song Mere Liye"
         m_yt_play = re.search(
             r"^(?:open|go\s+to|visit|navigate\s+to)\s+(?:the\s+)?(?:youtube|yt)(?:\s+website|\s+site|\s+app)?\s+(?:and|\&|then)\s+(?:play|watch|listen\s+to)\s+(?:the\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?(.+)$",
             txt,
@@ -1883,15 +2009,9 @@ class LinguisticIntentMatcher:
             q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
             q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
-                return StructuredAction(
-                    intent=CanonicalIntent.PLAY_MEDIA,
-                    confidence=0.98,
-                    parameters={"platform": "youtube", "query": q},
-                    raw_input=raw,
-                    normalized_input=norm_text,
-                )
+                return _build_music_action(q)
 
-        # 2. Infix / Platform: "YouTube pe <track> chala do", "On YouTube play <artist>"
+        # 6. Infix / Platform: "YouTube pe <track> chala do", "On YouTube play <artist>"
         m_plat = re.search(
             r"^(?:youtube\s+(?:pe|par|me|mein)|on\s+youtube)\s+(?:play\s+|baja\s+do\s+|chala\s+do\s+)?(?:the\s+)?(?:song\s+|gaana\s+)?(.+?)(?:\s+(?:chala\s+do|chalao|bajao|bhajao|baja\s+do|play\s+karo|play))?$",
             txt,
@@ -1901,15 +2021,9 @@ class LinguisticIntentMatcher:
             q = m_plat.group(1).strip()
             q = re.sub(r"\s+(?:chala\s+do|chalao|bajao|bhajao|baja\s+do|play\s+karo)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
-                return StructuredAction(
-                    intent=CanonicalIntent.PLAY_MEDIA,
-                    confidence=0.98,
-                    parameters={"platform": "youtube", "query": q},
-                    raw_input=raw,
-                    normalized_input=norm_text,
-                )
+                return _build_music_action(q)
 
-        # 3. English Prefix: "Play [the] [song] Kesariya [on youtube]"
+        # 7. English Prefix: "Play [the] [song] Kesariya [on youtube]", "Play some Arijit Singh songs"
         m_en = re.search(
             r"^(?:play|watch|listen\s+to|i\s+want\s+to\s+(?:watch|listen\s+to|hear))\s+(?:an?\s+)?(?:song\s+by\s+|track\s+by\s+|the\s+)?(?:song\s+|video\s+|track\s+|episode\s+)?(.+?)(?:\s+song|\s+songs)?(?:\s+on\s+youtube)?$",
             txt,
@@ -1920,15 +2034,9 @@ class LinguisticIntentMatcher:
             q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
             q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
-                return StructuredAction(
-                    intent=CanonicalIntent.PLAY_MEDIA,
-                    confidence=0.98,
-                    parameters={"platform": "youtube", "query": q},
-                    raw_input=raw,
-                    normalized_input=norm_text,
-                )
+                return _build_music_action(q)
 
-        # 4. Hindi / Hinglish Prefix: "Gaana sunao <query>", "Chala do <track>", "Baja do <artist>"
+        # 8. Hindi / Hinglish Prefix: "Gaana sunao <query>", "Chala do <track>", "Baja do <artist>"
         m_hi_pre = re.search(
             r"^(?:(?:gaana|gaane|song|songs|music|track)\s+)?(?:baja\s+do|bajao|bhajao|chala\s+do|chalao|chalu\s+karo|chalu\s+kar\s+do|sunao|suna\s+do|lagao|laga\s+do)\s+(?:koi\s+)?(?:accha\s+sa\s+|ek\s+)?(?:gaana|song|songs|music|track)?\s*(.+)$",
             txt,
@@ -1939,15 +2047,9 @@ class LinguisticIntentMatcher:
             q = re.sub(r"\s+on\s+youtube$", "", q, flags=re.I).strip()
             q = re.sub(r"\s+(?:for\s+me|please|kripya|now)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
-                return StructuredAction(
-                    intent=CanonicalIntent.PLAY_MEDIA,
-                    confidence=0.98,
-                    parameters={"platform": "youtube", "query": q},
-                    raw_input=raw,
-                    normalized_input=norm_text,
-                )
+                return _build_music_action(q)
 
-        # 5. Hindi / Hinglish Postfix: "<query> songs bhajao", "<query> wala gaana chala do", "<artist> ke gaane bajao"
+        # 9. Hindi / Hinglish Postfix: "<query> songs bhajao", "<query> wala gaana chala do", "<artist> ke gaane bajao"
         m_hi_post = re.search(
             r"^(.+?)\s+(?:ke\s+|ka\s+|wala\s+|wali\s+)?(?:gaana|gaane|geet|song|songs|music|track)?\s*(?:bhajao|bajao|baja\s+do|baja\s+dijiye|bajana|chala\s+do|chalao|chalu\s+karo|chalu\s+kar\s+do|sunao|suna\s+do|lagao|laga\s+do|play\s+karo)(?:\s+(?:for\s+me|please|kripya|now))?$",
             txt,
@@ -1957,13 +2059,7 @@ class LinguisticIntentMatcher:
             q = m_hi_post.group(1).strip()
             q = re.sub(r"\s+(?:ke|ka|wala|wali|song|songs|gaana)$", "", q, flags=re.I).strip()
             if q and q.lower() not in non_media_queries:
-                return StructuredAction(
-                    intent=CanonicalIntent.PLAY_MEDIA,
-                    confidence=0.98,
-                    parameters={"platform": "youtube", "query": q},
-                    raw_input=raw,
-                    normalized_input=norm_text,
-                )
+                return _build_music_action(q)
 
         return None
 

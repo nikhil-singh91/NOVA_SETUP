@@ -111,18 +111,42 @@ class ResponseOrchestrator:
                 disp = f"Could not open a new tab in {browser}." if not is_hi else f"{browser} mein naya tab open nahi ho paya."
                 return OrchestratedResponse(disp, disp, action.intent, success=False, metadata=metadata)
 
-        # 1. Media Playback Intent
-        if action.intent == CanonicalIntent.PLAY_MEDIA:
+        # 1. Media & Music Playback Intents
+        if action.intent in (
+            CanonicalIntent.PLAY_MEDIA,
+            CanonicalIntent.LISTEN_TO_MUSIC,
+            CanonicalIntent.PLAY_SPECIFIC_SONG,
+            CanonicalIntent.PLAY_ARTIST,
+            CanonicalIntent.PLAY_GENRE,
+            CanonicalIntent.PLAY_MOOD,
+            CanonicalIntent.SEARCH_MUSIC,
+        ):
             title = metadata.get("clean_title") or metadata.get("video_title") or action.parameters.get("query", "music")
             verified = metadata.get("verified", success)
+            is_followup = action.parameters.get("follow_up", False)
 
             if success and verified:
-                if is_hi:
-                    disp = f"Haan, mil gaya — {title} play kar raha hoon. 🎵"
-                    spk = f"Haan, mil gaya — {title} play kar raha hoon."
+                if is_followup:
+                    if is_hi:
+                        disp = f"Ye lo, ek aur — {title} play kar raha hoon. 🎵"
+                        spk = f"Ye lo, ek aur — {title} play kar raha hoon."
+                    else:
+                        disp = f"Sure, putting on another one: {title}. 🎵"
+                        spk = f"Sure, putting on another one: {title}."
+                elif action.intent == CanonicalIntent.LISTEN_TO_MUSIC:
+                    if is_hi:
+                        disp = f"Haan, aapke liye {title} play kar raha hoon! 🎵"
+                        spk = f"Haan, aapke liye {title} play kar raha hoon."
+                    else:
+                        disp = f"Sure, putting something on — playing {title} now. 🎵"
+                        spk = f"Sure, putting something on — playing {title} now."
                 else:
-                    disp = f"Yep, found it — playing {title} now. 🎵"
-                    spk = f"Yep, found it — playing {title} now."
+                    if is_hi:
+                        disp = f"Haan, mil gaya — {title} play kar raha hoon. 🎵"
+                        spk = f"Haan, mil gaya — {title} play kar raha hoon."
+                    else:
+                        disp = f"Yep, found it — playing {title} now. 🎵"
+                        spk = f"Yep, found it — playing {title} now."
                 return OrchestratedResponse(disp, spk, action.intent, success=True, metadata=metadata)
             elif metadata.get("clarification_needed"):
                 candidates = metadata.get("candidates", [])

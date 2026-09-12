@@ -941,10 +941,28 @@ class NovaApplication:
                 self._deliver_response(prompt, turn_id)
                 return
             # 3G. Dedicated Media & YouTube Shorts Dispatch (First-Class Action Intents)
-            if structured_action.intent == CanonicalIntent.PLAY_MEDIA:
-                DashboardStatsManager.record_understood("Play Media", details=structured_action.parameters)
+            if structured_action.intent in (
+                CanonicalIntent.PLAY_MEDIA,
+                CanonicalIntent.LISTEN_TO_MUSIC,
+                CanonicalIntent.PLAY_SPECIFIC_SONG,
+                CanonicalIntent.PLAY_ARTIST,
+                CanonicalIntent.PLAY_GENRE,
+                CanonicalIntent.PLAY_MOOD,
+                CanonicalIntent.SEARCH_MUSIC,
+            ):
+                intent_label = {
+                    CanonicalIntent.LISTEN_TO_MUSIC: "Listen to Music",
+                    CanonicalIntent.PLAY_ARTIST: "Play Artist",
+                    CanonicalIntent.PLAY_GENRE: "Play Genre",
+                    CanonicalIntent.PLAY_MOOD: "Play Mood",
+                    CanonicalIntent.PLAY_SPECIFIC_SONG: "Play Song",
+                    CanonicalIntent.SEARCH_MUSIC: "Search Music",
+                }.get(structured_action.intent, "Play Media")
+                DashboardStatsManager.record_understood(intent_label, details=structured_action.parameters)
                 query = structured_action.parameters.get("query", "")
-                DashboardStatsManager.record_action(f"Playing '{query}' on YouTube")
+                pref_info = self.recent_context.music_context.preference.to_search_query() if self.recent_context.music_context.active else "music"
+                action_desc = f"Playing '{query}' on YouTube" if query else f"Playing {pref_info} on YouTube"
+                DashboardStatsManager.record_action(action_desc)
                 from intent.router import structured_action_to_browser_plan
                 plan = structured_action_to_browser_plan(structured_action)
                 if plan:

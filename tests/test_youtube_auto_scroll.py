@@ -528,7 +528,7 @@ class TestYouTubeShortsAutoScroll:
     def test_duplicate_start_prevents_multiple_threads(self) -> None:
         controller = AutoScrollController(
             engine=self.engine,
-            policy=AutoScrollPolicy(dwell_time_seconds=0.2),
+            policy=AutoScrollPolicy(dwell_time_seconds=5.0),
         )
         succ1, _ = controller.start()
         assert succ1 is True

@@ -195,7 +195,7 @@ def test_open_website_paraphrases(intent_engine: NaturalLanguageIntentEngine, ph
 )
 def test_play_media_paraphrases(intent_engine: NaturalLanguageIntentEngine, phrase: str, expected_query: str) -> None:
     action = intent_engine.parse(phrase)
-    assert action.intent == CanonicalIntent.PLAY_MEDIA
+    assert action.intent in (CanonicalIntent.PLAY_MEDIA, CanonicalIntent.PLAY_SPECIFIC_SONG)
     assert action.parameters.get("platform") == "youtube"
     assert expected_query in action.parameters.get("query", "").lower()
 

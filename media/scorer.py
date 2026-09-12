@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 from core.logger import get_logger
-from media.models import MediaRequest, MediaType, VideoCandidate
+from media.models import MediaRequest, MediaType, VideoCandidate, ShortTermMusicContext
 
 logger = get_logger(__name__)
 
@@ -36,6 +36,28 @@ def _token_similarity(w1: str, w2: str) -> float:
     if w1 == w2:
         return 1.0
 
+    # Common Indic / ASR transliteration tolerances (e.g. w/v, sh/s, ph/f, ee/i, oo/u, kh/k)
+    phonetic_w1 = (
+        w1.replace("ph", "f")
+        .replace("w", "v")
+        .replace("sh", "s")
+        .replace("ee", "i")
+        .replace("oo", "u")
+        .replace("g", "k")
+        .replace("kh", "k")
+    )
+    phonetic_w2 = (
+        w2.replace("ph", "f")
+        .replace("w", "v")
+        .replace("sh", "s")
+        .replace("ee", "i")
+        .replace("oo", "u")
+        .replace("g", "k")
+        .replace("kh", "k")
+    )
+    if phonetic_w1 == phonetic_w2:
+        return 1.0
+
     # Substring containment
     if len(w1) > 3 and w1 in w2:
         return 0.95
@@ -45,12 +67,6 @@ def _token_similarity(w1: str, w2: str) -> float:
     dist = _levenshtein_distance(w1, w2)
     max_len = max(len(w1), len(w2))
     sim = max(0.0, 1.0 - (dist / max_len))
-
-    # Common ASR transliteration tolerances (e.g. k/g, c/k, kh/k)
-    phonetic_w1 = w1.replace("ph", "f").replace("g", "k").replace("kh", "k")
-    phonetic_w2 = w2.replace("ph", "f").replace("g", "k").replace("kh", "k")
-    if phonetic_w1 == phonetic_w2:
-        sim = max(sim, 0.90)
 
     return sim
 
@@ -101,13 +117,23 @@ class MediaMatchScorer:
     ]
 
     @classmethod
-    def score_candidate(cls, req: MediaRequest, candidate: VideoCandidate) -> float:
+    def score_candidate(
+        cls,
+        req: MediaRequest,
+        candidate: VideoCandidate,
+        music_context: ShortTermMusicContext | None = None,
+    ) -> float:
         """Calculate match score between request and candidate."""
         title_lower = candidate.title.lower()
         query_lower = req.query.lower().strip()
         channel_lower = candidate.channel.lower()
         reasons: list[str] = []
         score = 0.0
+
+        # Penalize recently played tracks to guarantee no repeats
+        if music_context and music_context.is_recently_played(candidate.video_id, candidate.title):
+            score -= 0.70
+            reasons.append("Penalized: Recently played in this session (no-repeat policy)")
 
         # Reject non-media queries
         if not query_lower or query_lower in ("youtube search", "youtube shorts", "shorts", "search", "youtube"):
@@ -126,13 +152,14 @@ class MediaMatchScorer:
         req_words = [
             w
             for w in re.findall(r"\w+", query_lower)
-            if len(w) > 1 and w not in ("song", "video", "official", "episode", "ep")
+            if len(w) > 1 and w not in ("song", "songs", "video", "videos", "music", "official", "episode", "ep", "best", "top", "hits", "popular", "latest", "trending", "mix", "playlist")
         ]
         if not req_words:
             req_words = [w for w in re.findall(r"\w+", query_lower) if len(w) > 1]
 
         # 1. Title Token Coverage with Generic Levenshtein & Phonetic Tolerance
         title_words = re.findall(r"\w+", title_lower)
+        coverage = 0.0
         if req_words:
             token_scores = []
             for rw in req_words:
@@ -147,12 +174,15 @@ class MediaMatchScorer:
             score += coverage * 0.45
             reasons.append(f"Token similarity coverage: {coverage:.2f} ({token_scores})")
 
-        # Exact title substring bonus
+        # Exact title substring or high phonetic match bonus
         if query_lower in title_lower:
             score += 0.20
             reasons.append("Exact query substring match")
         elif any(rw in title_lower for rw in req_words if len(rw) > 3):
             score += 0.10
+        elif req_words and coverage >= 0.80:
+            score += 0.15
+            reasons.append("Phonetic/token match bonus")
 
         # 2. Episode Number Matching
         if req.episode_number is not None:

@@ -19,6 +19,7 @@ from typing import Any
 
 from core.logger import get_logger
 from intent.models import CanonicalIntent
+from media.models import ShortTermMusicContext
 
 logger = get_logger(__name__)
 
@@ -129,6 +130,7 @@ class RecentInteractionContext:
         self.last_clicked_element: str | None = None
         self.is_shorts_active: bool = False
         self.is_auto_scroll_active: bool = False
+        self.music_context: ShortTermMusicContext = ShortTermMusicContext()
         self.last_update_time: float = datetime.now(timezone.utc).timestamp()
 
     @property
@@ -586,6 +588,28 @@ class ContextualReferenceResolver:
                         description=f"On-screen link #{idx}: {elem.label}",
                         confidence=0.90,
                     )
+
+        # ---------------------------------------------------------------------
+        # 3B. MUSIC FOLLOW-UP REFERENCES:
+        # 'another one', 'another song', 'one more', 'something else', 'play another', 'same type', 'something similar'
+        # ---------------------------------------------------------------------
+        if ref in (
+            "another one", "another song", "one more", "something else", "play another",
+            "same type", "something similar", "this artist", "that artist", "this song",
+            "another song like that", "next song", "next one",
+        ):
+            if context and (context.music_context.is_fresh() or (context.current_url and "youtube.com/watch" in context.current_url)):
+                pref = context.music_context.preference
+                pref_desc = f"Artist: {pref.artist}" if pref.artist else (f"Genre: {pref.genre}" if pref.genre else "Recent music preference")
+                return ResolvedEntity(
+                    resolved=True,
+                    reference_term=raw_ref,
+                    target_type="music_track",
+                    target_value={"preference": pref.model_dump(), "last_track": context.music_context.current_track.model_dump() if context.music_context.current_track else None},
+                    source="recent_context",
+                    description=f"Follow-up music request for {pref_desc}",
+                    confidence=0.95,
+                )
 
         # ---------------------------------------------------------------------
         # 4. PRONOUNS 'it', 'that', 'there'

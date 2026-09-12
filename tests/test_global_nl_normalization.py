@@ -61,7 +61,7 @@ def test_multi_action_search_and_media(
 ) -> None:
     action = engine.parse(phrase, allow_ai_fallback=False)
     if expected_site == "youtube" and "play" in phrase.lower():
-        assert action.intent == CanonicalIntent.PLAY_MEDIA
+        assert action.intent in (CanonicalIntent.PLAY_MEDIA, CanonicalIntent.PLAY_SPECIFIC_SONG)
         assert action.parameters.get("query", "").lower() == expected_query.lower()
     else:
         assert action.intent == CanonicalIntent.SEARCH_WEBSITE

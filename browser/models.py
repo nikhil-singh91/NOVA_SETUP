@@ -19,6 +19,7 @@ class ActionType(str, Enum):
     SEARCH_WEB = "search_web"
     SEARCH_SITE = "search_site"
     PLAY_MEDIA = "play_media"
+    LISTEN_TO_MUSIC = "listen_to_music"
     WATCH_VIDEO = "watch_video"
     WATCH_SHORTS = "watch_shorts"
     START_AUTO_SHORTS = "start_auto_shorts"

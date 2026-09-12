@@ -275,7 +275,7 @@ def test_turn_sequence_state_isolation() -> None:
 
     # Turn 1: Music command
     act1 = engine.parse("Nova, play some music.")
-    assert act1.intent == CanonicalIntent.PLAY_MEDIA
+    assert act1.intent in (CanonicalIntent.LISTEN_TO_MUSIC, CanonicalIntent.PLAY_MEDIA)
 
     # Turn 2: Non-speech event alone
     res2 = AudioEventDetector.analyze("[laughter]")
@@ -283,7 +283,7 @@ def test_turn_sequence_state_isolation() -> None:
     # Isolated non-speech yields empty clean_text -> GENERAL_CONVERSATION, not music
     act2 = engine.parse(res2.clean_text)
     assert act2.intent == CanonicalIntent.GENERAL_CONVERSATION
-    assert act2.intent != CanonicalIntent.PLAY_MEDIA
+    assert act2.intent not in (CanonicalIntent.PLAY_MEDIA, CanonicalIntent.LISTEN_TO_MUSIC)
 
     # Turn 3: Casual conversational query
     act3 = engine.parse("Nova, how are you?")

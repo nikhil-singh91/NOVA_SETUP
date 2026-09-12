@@ -49,6 +49,7 @@ class YouTubeSkill(BaseSiteSkill):
             return True
         if plan.action_type in (
             ActionType.PLAY_MEDIA,
+            ActionType.LISTEN_TO_MUSIC,
             ActionType.WATCH_VIDEO,
             ActionType.WATCH_SHORTS,
             ActionType.START_AUTO_SHORTS,
@@ -126,8 +127,8 @@ class YouTubeSkill(BaseSiteSkill):
         if plan.action_type == ActionType.WATCH_SHORTS:
             return self._handle_shorts(plan, engine, sessions)
 
-        # 5. Play Media / Watch Video
-        if plan.action_type in (ActionType.PLAY_MEDIA, ActionType.WATCH_VIDEO):
+        # 5. Play Media / Watch Video / Listen to Music
+        if plan.action_type in (ActionType.PLAY_MEDIA, ActionType.WATCH_VIDEO, ActionType.LISTEN_TO_MUSIC):
             return self._handle_play_media(plan, engine)
 
         # 6. Default YouTube Search / Open Site
@@ -138,13 +139,32 @@ class YouTubeSkill(BaseSiteSkill):
         plan: BrowserActionPlan,
         engine: BaseBrowserEngine,
     ) -> BrowserResult:
-        """Search for a video, score multiple candidates, open, and verify playback."""
+        """Search for a video, score multiple candidates, open, and verify playback with music context."""
         query = (plan.query or "").strip()
-        if not query or query.lower() in ("youtube search", "youtube shorts", "shorts", "search"):
-            query = "Trending Music"
+        is_generic_listen = (plan.action_type == ActionType.LISTEN_TO_MUSIC)
 
-        logger.info("Resolving YouTube video candidates for media request: '%s'", query)
-        selected_candidate, req, candidates = self.media_service.resolve_best_video(query)
+        from core.context import recent_interaction_context
+        music_ctx = recent_interaction_context.music_context
+
+        # If meta has explicit preference or intent, sync with context
+        meta_dict = plan.metadata or {}
+        if meta_dict.get("artist"):
+            music_ctx.update_preference(artist=meta_dict["artist"])
+        elif meta_dict.get("genre_or_mood"):
+            music_ctx.update_preference(genre=meta_dict["genre_or_mood"])
+
+        logger.info(
+            "Resolving YouTube video candidates (query='%s', generic=%s, active_pref=%s)",
+            query,
+            is_generic_listen,
+            music_ctx.preference.model_dump(),
+        )
+
+        selected_candidate, req, candidates = self.media_service.resolve_best_video(
+            query_or_text=query or "Trending Music",
+            music_context=music_ctx,
+            is_generic_listen=is_generic_listen,
+        )
 
         if selected_candidate:
             watch_url = selected_candidate.url
@@ -172,6 +192,20 @@ class YouTubeSkill(BaseSiteSkill):
             clean_title = re.sub(r"\s*-\s*(?:YouTube|Topic)$", "", display_name, flags=re.I).strip()
             short_title = clean_title.split("|")[0].split("-")[0].strip() or clean_title
 
+            if verified:
+                # Add to recent music playback history to prevent repeats
+                music_ctx.add_played_track(
+                    video_id=selected_candidate.video_id,
+                    title=display_name,
+                    channel=selected_candidate.channel,
+                    url=watch_url,
+                )
+                recent_interaction_context.update_browser_state(
+                    browser_name="Google Chrome",
+                    url=watch_url,
+                    title=display_name,
+                )
+
             log_browser_diagnostics(
                 "PLAY_YOUTUBE_VIDEO",
                 "VERIFIED" if verified else "UNVERIFIED",
@@ -194,6 +228,7 @@ class YouTubeSkill(BaseSiteSkill):
                         "match_score": selected_candidate.score,
                         "channel": selected_candidate.channel,
                         "duration": selected_candidate.duration_str,
+                        "video_id": selected_candidate.video_id,
                         "verified": True,
                     },
                 )

@@ -70,7 +70,15 @@ def get_routing_domain(intent: CanonicalIntent) -> RoutingDomain:
     ):
         return RoutingDomain.BROWSER
 
-    if intent in (CanonicalIntent.PLAY_MEDIA,):
+    if intent in (
+        CanonicalIntent.PLAY_MEDIA,
+        CanonicalIntent.LISTEN_TO_MUSIC,
+        CanonicalIntent.PLAY_SPECIFIC_SONG,
+        CanonicalIntent.PLAY_ARTIST,
+        CanonicalIntent.PLAY_GENRE,
+        CanonicalIntent.PLAY_MOOD,
+        CanonicalIntent.SEARCH_MUSIC,
+    ):
         return RoutingDomain.BROWSER
 
     if intent in (CanonicalIntent.LAUNCH_APP, CanonicalIntent.CLOSE_APP, CanonicalIntent.OPEN_CAMERA, CanonicalIntent.TAKE_PHOTO):
@@ -262,12 +270,24 @@ def structured_action_to_browser_plan(action: StructuredAction) -> Any:
             raw_prompt=raw,
         )
 
-    if action.intent == CanonicalIntent.PLAY_MEDIA:
+    if action.intent in (
+        CanonicalIntent.PLAY_MEDIA,
+        CanonicalIntent.LISTEN_TO_MUSIC,
+        CanonicalIntent.PLAY_SPECIFIC_SONG,
+        CanonicalIntent.PLAY_ARTIST,
+        CanonicalIntent.PLAY_GENRE,
+        CanonicalIntent.PLAY_MOOD,
+        CanonicalIntent.SEARCH_MUSIC,
+    ):
         q = params.get("query", "")
+        act_type = ActionType.LISTEN_TO_MUSIC if action.intent == CanonicalIntent.LISTEN_TO_MUSIC else ActionType.PLAY_MEDIA
+        meta = dict(params)
+        meta["canonical_intent"] = action.intent.value
         return BrowserActionPlan(
-            action_type=ActionType.PLAY_MEDIA,
+            action_type=act_type,
             platform=Platform.YOUTUBE,
             query=q,
+            metadata=meta,
             raw_prompt=raw,
         )
 
