@@ -885,8 +885,38 @@ class LinguisticIntentMatcher:
         return None
 
     def _match_screen_awareness(self, txt: str, raw: str, norm_text: str) -> StructuredAction | None:
+        # Check cursor query ("what is at my cursor?", "what is the cursor pointing at?")
+        if re.search(r"\b(?:cursor|mouse|pointer)\b", txt) and any(w in txt for w in ("what", "pointing", "at", "kahan")):
+            return StructuredAction(
+                intent=CanonicalIntent.WHAT_AM_I_LOOKING_AT,
+                confidence=0.98,
+                parameters={"target": "cursor"},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # Check product/item comparison query ("compare these", "which one is better")
+        if re.search(r"^(?:compare\s+(?:these(?:\s+two)?|products?|them|visible\s+options?)|which\s+one\s+is\s+better|inhe\s+compare\s+karo)$", txt):
+            return StructuredAction(
+                intent=CanonicalIntent.WHAT_AM_I_LOOKING_AT,
+                confidence=0.98,
+                parameters={"mode": "compare"},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
+        # Check summarization query ("summarize this page", "summarize my screen")
+        if re.search(r"^(?:summarize\s+(?:this(?:\s+page)?|the\s+page|my\s+screen|screen|page)|page\s+summarize\s+karo)$", txt):
+            return StructuredAction(
+                intent=CanonicalIntent.WHAT_AM_I_LOOKING_AT,
+                confidence=0.98,
+                parameters={"mode": "summarize"},
+                raw_input=raw,
+                normalized_input=norm_text,
+            )
+
         patterns = [
-            r"^(?:what\s+(?:am\s+i|are\s+we|are\s+you|can\s+you)\s+(?:looking\s+at|seeing|seeing\s+on\s+(?:my\s+)?screen|see\s+on\s+(?:my\s+)?screen|see)|what\s+is\s+on\s+(?:my\s+)?screen|what\'?s\s+on\s+(?:my\s+)?screen|what\s+do\s+you\s+see(?:\s+on\s+(?:my\s+)?screen)?|what\s+can\s+you\s+see(?:\s+on\s+(?:my\s+)?screen)?|explain\s+(?:my\s+)?screen|read\s+(?:this|my\s+screen|what\'?s\s+(?:on\s+my\s+screen|written\s+here))|summarize\s+(?:this(?:\s+page)?|my\s+screen)|what(?:\'s|\s+is)\s+written\s+here|what\'?s\s+this|what\s+is\s+this)$",
+            r"^(?:what\s+(?:am\s+i|are\s+we|are\s+you|can\s+you)\s+(?:looking\s+at|seeing|seeing\s+on\s+(?:my\s+)?screen|see\s+on\s+(?:my\s+)?screen|see)|what\s+is\s+on\s+(?:my\s+)?screen|what\'?s\s+on\s+(?:my\s+)?screen|what\s+do\s+you\s+see(?:\s+on\s+(?:my\s+)?screen)?|what\s+can\s+you\s+see(?:\s+on\s+(?:my\s+)?screen)?|explain\s+(?:my\s+)?screen|read\s+(?:this|my\s+screen|what\'?s\s+(?:on\s+my\s+screen|written\s+here))|what(?:\'s|\s+is)\s+written\s+here|what\'?s\s+this|what\s+is\s+this)$",
             r"^(?:screen\s+pe\s+kya\s+hai|screen\s+pe\s+kya\s+dikh\s+raha\s+hai|kya\s+dekh\s+rahe\s+ho|tum\s+kya\s+dekh\s+rahe\s+ho|screen\s+dekho|yeh\s+kya\s+hai|kya\s+chal\s+raha\s+hai|screen\s+read\s+karo|yeh\s+padho|kya\s+likha\s+hai(?:\s+yahan)?)$",
         ]
         for pat in patterns:

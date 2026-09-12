@@ -10,6 +10,7 @@ from core.eyes.accessibility import (
     AccessibilityInspector,
     SemanticElement,
     UIElementType,
+    WorkspaceEventsObserver,
 )
 from core.eyes.capture import DisplayMetrics, MemoryFrame, ScreenCapturer
 from core.eyes.interaction import EyesInteractionManager
@@ -19,9 +20,14 @@ from core.eyes.planner import (
     ConfidenceLevel,
     EyesTargetResolver,
 )
-from core.eyes.state import ScreenState
+from core.eyes.proactive import (
+    ProactiveAssistanceEngine,
+    ProactiveOpportunity,
+    ProactiveTriggerType,
+)
+from core.eyes.state import PageCategory, ProductCandidate, ScreenState
 from core.eyes.verifier import EyesStateVerifier, VerificationOutcome
-from core.eyes.vision_ocr import VisionOCR
+from core.eyes.vision_ocr import VisionOCR, VisualEntityCard
 
 __all__ = [
     "AccessibilityInspector",
@@ -33,11 +39,18 @@ __all__ = [
     "EyesTargetResolver",
     "MemoryFrame",
     "NovaEyesManager",
+    "PageCategory",
+    "ProactiveAssistanceEngine",
+    "ProactiveOpportunity",
+    "ProactiveTriggerType",
+    "ProductCandidate",
     "ScreenCapturer",
     "ScreenState",
     "SemanticElement",
     "UIElementType",
     "VerificationOutcome",
     "VisionOCR",
+    "VisualEntityCard",
+    "WorkspaceEventsObserver",
     "nova_eyes",
 ]

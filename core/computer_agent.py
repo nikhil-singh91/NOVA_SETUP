@@ -230,10 +230,10 @@ class ComputerAgent:
         legacy_ui_elem = UIElement.create(
             UIElementType.BUTTON,
             target_elem.label,
-            target_elem.x,
-            target_elem.y,
-            target_elem.width,
-            target_elem.height,
+            int(target_elem.x),
+            int(target_elem.y),
+            int(target_elem.width),
+            int(target_elem.height),
         )
 
         return VisualResult(
@@ -365,9 +365,9 @@ class ComputerAgent:
             if target_label:
                 snapshot = self.observer.capture_current_screen()
                 analysis = ScreenAnalyzer.analyze_snapshot(snapshot, self.provider_mgr)
-                target_elem, conf, score = UITargetResolver.resolve_target(target_label, analysis, target_type=UIElementType.INPUT)
-                if target_elem:
-                    self.interaction_mgr.click_element(target_elem, snapshot=snapshot, stop_event=self._stop_event)
+                legacy_elem, _, _ = UITargetResolver.resolve_target(target_label, analysis)
+                if legacy_elem:
+                    self.interaction_mgr.click_element(legacy_elem, snapshot=snapshot, stop_event=self._stop_event)
             success = self.interaction_mgr.type_text(text, submit=submit, stop_event=self._stop_event)
             spoken = f"Typed '{text}'." + (" Submitted." if submit else "")
             return VisualResult(success=success, action_type=VisualActionType.TYPE_TEXT, message=spoken, spoken_response=spoken, verified=success)
@@ -601,6 +601,58 @@ class ComputerAgent:
                 spoken_response=msg,
                 verified=False,
             )
+
+    def summarize_current_page(self, is_hinglish: bool = False) -> VisualResult:
+        """Summarize the page currently visible on screen without asking 'what page?'."""
+        self.reset_cancellation()
+        try:
+            state = self.eyes.observe_now(force_ocr=True)
+            summary = state.summarize_page(is_hinglish=is_hinglish)
+            return VisualResult(
+                success=True,
+                action_type=VisualActionType.EXPLAIN_SCREEN,
+                message=summary,
+                spoken_response=summary,
+                verified=True,
+                metadata={"app": state.active_application, "window": state.active_window, "category": state.page_category.value},
+            )
+        except Exception as exc:
+            logger.error("Screen summarization failed: %s", exc)
+            msg = "Screen summarize nahi ho pa rahi." if is_hinglish else "Could not summarize the current screen."
+            return VisualResult(success=False, action_type=VisualActionType.EXPLAIN_SCREEN, message=msg, spoken_response=msg, verified=False)
+
+    def compare_visible_products(self, is_hinglish: bool = False) -> VisualResult:
+        """Compare detected candidate products visible on the active screen."""
+        self.reset_cancellation()
+        try:
+            state = self.eyes.observe_now(force_ocr=True)
+            comp = state.compare_visible_products(is_hinglish=is_hinglish)
+            return VisualResult(
+                success=True,
+                action_type=VisualActionType.EXPLAIN_SCREEN,
+                message=comp,
+                spoken_response=comp,
+                verified=True,
+            )
+        except Exception as exc:
+            logger.error("Product comparison failed: %s", exc)
+            msg = "Products compare nahi ho sake." if is_hinglish else "Could not compare visible products."
+            return VisualResult(success=False, action_type=VisualActionType.EXPLAIN_SCREEN, message=msg, spoken_response=msg, verified=False)
+
+    def what_is_at_cursor(self, is_hinglish: bool = False) -> VisualResult:
+        """Inspect and describe what the user's mouse cursor is currently pointing at."""
+        self.reset_cancellation()
+        try:
+            state = self.eyes.observe_now(force_ocr=True)
+            elem = state.get_element_under_cursor()
+            if elem:
+                desc = f"Cursor is pointing at {elem.element_type.value} '{elem.label}'." if not is_hinglish else f"Cursor '{elem.label}' ({elem.element_type.value}) par point kar raha hai."
+            else:
+                desc = f"Cursor is at ({int(state.cursor_position[0])}, {int(state.cursor_position[1])}), but no specific element is focused directly under it." if not is_hinglish else f"Cursor ({int(state.cursor_position[0])}, {int(state.cursor_position[1])}) par hai."
+            return VisualResult(success=True, action_type=VisualActionType.EXPLAIN_SCREEN, message=desc, spoken_response=desc, verified=True)
+        except Exception as exc:
+            logger.error("Cursor inspection failed: %s", exc)
+            return VisualResult(success=False, action_type=VisualActionType.EXPLAIN_SCREEN, message="Could not inspect cursor.", spoken_response="Could not inspect cursor.", verified=False)
 
 
 # Global singleton ComputerAgent

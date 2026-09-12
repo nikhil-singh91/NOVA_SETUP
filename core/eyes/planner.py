@@ -216,8 +216,10 @@ class EyesTargetResolver:
         """Find a close/dismiss button on active dialogs, popups, or windows."""
         # 1. Look within detected dialogs
         for dialog in state.dialogs:
-            for child in dialog.children:
-                if child.element_type == UIElementType.BUTTON:
+            dx, dy, dw, dh = dialog.bounding_box
+            for child in state.buttons:
+                cx, cy = child.center_point
+                if dx <= cx <= (dx + dw) and dy <= cy <= (dy + dh):
                     lbl = (child.label or "").lower()
                     if lbl in ("close", "cancel", "dismiss", "x", "cross", "done"):
                         return child

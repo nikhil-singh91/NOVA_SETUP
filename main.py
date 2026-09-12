@@ -309,9 +309,22 @@ class NovaApplication:
         """Initialize NOVA Eyes + Computer Interaction Agent."""
         try:
             self.computer_agent.initialize()
+            if hasattr(self.computer_agent, "eyes") and self.computer_agent.eyes:
+                self.computer_agent.eyes.set_proactive_callback(self._on_proactive_opportunity)
             logger.info("ComputerAgent (NOVA Eyes) initialized.")
         except Exception as exc:
             logger.warning("ComputerAgent initialization note: %s", exc)
+
+    def _on_proactive_opportunity(self, opp: Any) -> None:
+        """Handle proactive perception opportunities with non-intrusive delivery."""
+        try:
+            if getattr(self, "conversation_active", False) or getattr(self, "is_speaking", False):
+                return
+            spoken = opp.get_spoken_text(is_hinglish=False)
+            logger.info("[PROACTIVE ASSISTANCE] %s", spoken)
+            DashboardStatsManager.record_action(f"Proactive: {opp.trigger_type.value}")
+        except Exception as exc:
+            logger.debug("Proactive delivery error: %s", exc)
 
     def _initialize_voice(self) -> None:
         """Initialize Voice V2 subsystem."""
@@ -856,11 +869,38 @@ class NovaApplication:
                     DashboardStatsManager.record_action("Observing screen with NOVA Eyes")
                     from personality.response_orchestrator import ResponseOrchestrator
                     is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
-                    res = self.computer_agent.explain_screen_content(is_hinglish=is_hi, env_context=ctx)
+
+                    # Check if cursor inspection or product comparison was requested
+                    if structured_action.parameters.get("target") == "cursor":
+                        res = self.computer_agent.what_is_at_cursor(is_hinglish=is_hi)
+                    elif structured_action.parameters.get("mode") == "compare":
+                        res = self.computer_agent.compare_visible_products(is_hinglish=is_hi)
+                    elif structured_action.parameters.get("mode") == "summarize" or "summarize" in user_text.lower():
+                        res = self.computer_agent.summarize_current_page(is_hinglish=is_hi)
+                    else:
+                        res = self.computer_agent.explain_screen_content(is_hinglish=is_hi, env_context=ctx)
+
                     orch = ResponseOrchestrator.format_action_response(
                         structured_action, res, user_text, screen_desc=res.spoken_response
                     )
                     DashboardStatsManager.record_result("✓ Screen observed" if res.success else "✗ Eyes unavailable", success=res.success)
+                    self._deliver_orchestrated_response(orch, turn_id)
+                    return
+
+                if structured_action.intent in (
+                    CanonicalIntent.SUMMARIZE_CURRENT_PAGE,
+                    CanonicalIntent.EXPLAIN_PAGE,
+                    CanonicalIntent.READ_CURRENT_PAGE,
+                ):
+                    DashboardStatsManager.record_understood("Screen Summarization")
+                    DashboardStatsManager.record_action("Summarizing visible page with NOVA Eyes")
+                    from personality.response_orchestrator import ResponseOrchestrator
+                    is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
+                    res = self.computer_agent.summarize_current_page(is_hinglish=is_hi)
+                    orch = ResponseOrchestrator.format_action_response(
+                        structured_action, res, user_text, screen_desc=res.spoken_response
+                    )
+                    DashboardStatsManager.record_result("✓ Screen summarized" if res.success else "✗ Eyes unavailable", success=res.success)
                     self._deliver_orchestrated_response(orch, turn_id)
                     return
 

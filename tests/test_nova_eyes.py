@@ -549,3 +549,260 @@ def test_computer_agent_low_confidence_asks_clarification() -> None:
         res = agent.execute_visual_goal("click nonexistent blue diamond widget")
         assert res.success is False
         assert "clarify" in res.spoken_response.lower()
+
+
+# =============================================================================
+# 10. SCREENCAPTUREKIT DIAGNOSTICS & PERMISSION CHECKS
+# =============================================================================
+
+def test_screencapturekit_diagnostics() -> None:
+    """Verify ScreenCapturer exposes accurate permission and zero-disk diagnostics."""
+    capturer = ScreenCapturer()
+    diag = capturer.get_permission_diagnostics()
+    assert isinstance(diag["screen_recording_granted"], bool)
+    assert diag["quartz_fallback_ready"] is True
+    assert diag["disk_writes"] == "STRICTLY_OFF"
+
+
+# =============================================================================
+# 11. WORKSPACE EVENTS OBSERVER (DESKTOP LIFECYCLE)
+# =============================================================================
+
+def test_workspace_events_observer_lifecycle() -> None:
+    """Verify WorkspaceEventsObserver starts and stops without error."""
+    from core.eyes import WorkspaceEventsObserver
+    events_received: list[tuple[str, str]] = []
+
+    def _cb(ev: str, app: str) -> None:
+        events_received.append((ev, app))
+
+    obs = WorkspaceEventsObserver(_cb)
+    started = obs.start()
+    assert isinstance(started, bool)
+    obs.stop()
+
+
+# =============================================================================
+# 12. VISION LOCAL SCENE CLASSIFICATION & PRODUCT CARD CLUSTERING
+# =============================================================================
+
+def test_vision_product_card_clustering() -> None:
+    """Verify VisionOCR clusters nearby price and title into structured VisualEntityCards."""
+    ocr = VisionOCR()
+
+    title_elem = SemanticElement.create(
+        UIElementType.TEXT,
+        "Nike Air Zoom Pegasus 40",
+        100.0,
+        150.0,
+        200.0,
+        30.0,
+        element_id="t1",
+    )
+    price_elem = SemanticElement.create(
+        UIElementType.TEXT,
+        "$130.00",
+        100.0,
+        185.0,
+        80.0,
+        25.0,
+        element_id="p1",
+        role="OCRPrice",
+        metadata={"price": "$130.00"},
+    )
+    rating_elem = SemanticElement.create(
+        UIElementType.TEXT,
+        "4.8 ★ (1,200)",
+        190.0,
+        185.0,
+        90.0,
+        25.0,
+        element_id="r1",
+        role="OCRRating",
+        metadata={"rating": "4.8 ★"},
+    )
+
+    cards = ocr.detect_visual_cards([title_elem, price_elem, rating_elem])
+    assert len(cards) == 1
+    card = cards[0]
+    assert "Pegasus" in card.title
+    assert card.price == "$130.00"
+    assert card.price_val == 130.0
+
+
+# =============================================================================
+# 13. SCREEN STATE WORLD MODEL CATEGORIZATION & SEARCH QUERY
+# =============================================================================
+
+def test_screen_state_page_categorization() -> None:
+    """Verify ScreenState automatically categorizes shopping, search, and coding contexts."""
+    from core.eyes import PageCategory
+    metrics = DisplayMetrics.get_primary_metrics()
+    now = datetime.now(timezone.utc)
+
+    # Shopping state
+    st_shop = ScreenState.build_from_sources(
+        timestamp=now,
+        active_app="Google Chrome",
+        active_win="Nike Running Shoes Store",
+        metrics=metrics,
+        visual_hash="h_shop",
+        ax_elements=[],
+        ocr_elements=[],
+        browser_info={
+            "active_browser": "Google Chrome",
+            "current_url": "https://www.nike.com/w/running-shoes-37v7j",
+            "current_page_title": "Running Shoes",
+        },
+    )
+    assert st_shop.page_category == PageCategory.SHOPPING
+
+    # Search results state
+    st_search = ScreenState.build_from_sources(
+        timestamp=now,
+        active_app="Safari",
+        active_win="Google Search",
+        metrics=metrics,
+        visual_hash="h_search",
+        ax_elements=[],
+        ocr_elements=[],
+        browser_info={
+            "active_browser": "Safari",
+            "current_url": "https://www.google.com/search?q=best+running+shoes",
+            "current_page_title": "Google",
+        },
+    )
+    assert st_search.page_category == PageCategory.SEARCH_RESULTS
+    assert st_search.current_search_query == "best running shoes"
+
+
+# =============================================================================
+# 14. PROACTIVE ASSISTANCE ENGINE GUARDRAILS
+# =============================================================================
+
+def test_proactive_assistance_engine_guardrails() -> None:
+    """Verify ProactiveAssistanceEngine enforces cooldown and suppresses sensitive views."""
+    from core.eyes import (
+        PageCategory,
+        ProactiveAssistanceEngine,
+        ProactiveTriggerType,
+        ProductCandidate,
+    )
+    metrics = DisplayMetrics.get_primary_metrics()
+    now = datetime.now(timezone.utc)
+    engine = ProactiveAssistanceEngine(cooldown_seconds=60.0)
+
+    # 1. Sensitive screen - must return None
+    st_sensitive = ScreenState(
+        timestamp=now,
+        active_application="1Password",
+        active_window="Master Password",
+        metrics=metrics,
+        visual_hash="h_pw",
+        contains_sensitive_data=True,
+        page_category=PageCategory.AUTH_LOGIN,
+    )
+    assert engine.evaluate_state(st_sensitive) is None
+
+    # 2. Shopping comparison screen - offers proactive suggestion
+    p1 = ProductCandidate(title="Shoe A", price="$100", rating="4.5")
+    p2 = ProductCandidate(title="Shoe B", price="$120", rating="4.7")
+    st_compare = ScreenState(
+        timestamp=now,
+        active_application="Chrome",
+        active_window="Shoe Store",
+        metrics=metrics,
+        visual_hash="h_c1",
+        page_category=PageCategory.SHOPPING,
+        product_candidates=[p1, p2],
+    )
+    opp = engine.evaluate_state(st_compare)
+    assert opp is not None
+    assert opp.trigger_type == ProactiveTriggerType.SHOPPING_COMPARISON
+    assert "compare" in opp.spoken_suggestion_en.lower()
+
+    # 3. Cooldown test - consecutive call should return None
+    opp_cooldown = engine.evaluate_state(st_compare)
+    assert opp_cooldown is None
+
+    # 4. After reset, can trigger again
+    engine.reset_cooldown()
+    # Different product signature
+    p3 = ProductCandidate(title="Shoe C", price="$90")
+    p4 = ProductCandidate(title="Shoe D", price="$110")
+    st_compare2 = ScreenState(
+        timestamp=now,
+        active_application="Chrome",
+        active_window="Shoe Store 2",
+        metrics=metrics,
+        visual_hash="h_c2",
+        page_category=PageCategory.SHOPPING,
+        product_candidates=[p3, p4],
+    )
+    opp2 = engine.evaluate_state(st_compare2)
+    assert opp2 is not None
+
+
+# =============================================================================
+# 15. SCREEN SUMMARIZATION & CURSOR AWARENESS
+# =============================================================================
+
+def test_computer_agent_summarize_current_page() -> None:
+    """Verify ComputerAgent summarizes the active page directly from current state."""
+    from core.eyes import PageCategory, ProductCandidate
+    metrics = DisplayMetrics.get_primary_metrics()
+    now = datetime.now(timezone.utc)
+
+    p1 = ProductCandidate(title="Road Runner", price="$89.99", rating="4.5 ★")
+    p2 = ProductCandidate(title="Trail Blazer", price="$109.99", rating="4.8 ★")
+
+    state = ScreenState(
+        timestamp=now,
+        active_application="Google Chrome",
+        active_window="Running Gear",
+        metrics=metrics,
+        visual_hash="h_sum",
+        page_category=PageCategory.SHOPPING,
+        product_candidates=[p1, p2],
+    )
+
+    agent = ComputerAgent()
+    with patch.object(agent.eyes, "observe_now", return_value=state):
+        res = agent.summarize_current_page()
+        assert res.success is True
+        assert "Road Runner" in res.spoken_response
+        assert "Trail Blazer" in res.spoken_response
+
+
+def test_computer_agent_what_is_at_cursor() -> None:
+    """Verify ComputerAgent identifies the element located at current cursor position."""
+    metrics = DisplayMetrics.get_primary_metrics()
+    now = datetime.now(timezone.utc)
+
+    btn = SemanticElement.create(
+        UIElementType.BUTTON,
+        "Checkout Now",
+        500.0,
+        300.0,
+        150.0,
+        40.0,
+        element_id="b_cur",
+    )
+
+    state = ScreenState(
+        timestamp=now,
+        active_application="Safari",
+        active_window="Store",
+        metrics=metrics,
+        visual_hash="h_cur",
+        cursor_position=(550.0, 320.0),  # Inside btn bounds
+        elements=[btn],
+        buttons=[btn],
+    )
+
+    agent = ComputerAgent()
+    with patch.object(agent.eyes, "observe_now", return_value=state):
+        res = agent.what_is_at_cursor()
+        assert res.success is True
+        assert "Checkout Now" in res.spoken_response
+

@@ -104,6 +104,31 @@ class EyesInteractionManager:
             logger.error("Failed to move cursor to (%d, %d): %s", x, y, exc)
             return False
 
+    def get_cursor_position(self) -> tuple[float, float]:
+        """Query the current cursor location on the primary display."""
+        try:
+            if Quartz and hasattr(Quartz, "CGEventGetLocation"):
+                ev = Quartz.CGEventCreate(None)
+                if ev:
+                    pt = Quartz.CGEventGetLocation(ev)
+                    return float(pt.x), float(pt.y)
+        except Exception as exc:
+            logger.debug("Failed to query cursor location: %s", exc)
+        return 0.0, 0.0
+
+    def hover_element(
+        self,
+        element: SemanticElement,
+        duration: float = 0.5,
+        stop_event: threading.Event | None = None,
+    ) -> bool:
+        """Move cursor over semantic element and hover for the specified duration."""
+        cx, cy = element.center_point
+        moved = self.move_cursor(int(cx), int(cy), smooth=True, stop_event=stop_event)
+        if moved and duration > 0:
+            time.sleep(duration)
+        return moved
+
     def click_point(
         self,
         x: int,
