@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#07090E" />
+  <rect x="1" y="1" width="62" height="62" rx="13" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+  <circle cx="32" cy="32" r="22" stroke="url(#nova-cyan-grad)" stroke-width="2" stroke-dasharray="8 6" opacity="0.4" />
+  <path d="M22 44V20L34 36V20M34 20V44L44 30V44" stroke="url(#nova-cyan-grad)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="44" cy="20" r="3" fill="#00F2FE" />
+  <defs>
+    <linearGradient id="nova-cyan-grad" x1="20" y1="20" x2="46" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00F2FE" />
+      <stop offset="0.5" stop-color="#0EA5E9" />
+      <stop offset="1" stop-color="#8B5CF6" />
+    </linearGradient>
+  </defs>
+</svg>
