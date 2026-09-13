@@ -384,6 +384,33 @@ class RecentInteractionContext:
             self.last_update_time = datetime.now(timezone.utc).timestamp()
             logger.info("RecentInteractionContext: Recorded newly opened tab: %s", tab_info)
 
+    def record_web_research(
+        self,
+        query: str,
+        sources: list[dict[str, Any]],
+        summary: str = "",
+        mode: str = "search",
+    ) -> None:
+        """Record live web intelligence outcome into transient task context.
+
+        Stores structured research items so subsequent queries (e.g.
+        'which one has the best camera?', 'compare the first and third',
+        'open the second one') can resolve against the current task context.
+        """
+        with self._lock:
+            self.last_search_query = query
+            self.last_search_results = list(sources)
+            self.last_action = "LIVE_WEB_RESEARCH"
+            self.last_action_target = query
+            self.last_action_status = "VERIFIED"
+            self.last_update_time = datetime.now(timezone.utc).timestamp()
+            logger.info(
+                "RecentInteractionContext: Recorded %d live web sources for '%s' (mode=%s)",
+                len(sources),
+                query,
+                mode,
+            )
+
     def is_fresh(self, max_age_seconds: float = 120.0) -> bool:
         """Check whether recent action state is sufficiently fresh."""
         with self._lock:
@@ -548,7 +575,10 @@ class ContextualReferenceResolver:
         # 3. SEARCH RESULT & ORDINAL REFERENCES:
         # 'the second result', 'the first one', 'open that one', 'the last result'
         # ---------------------------------------------------------------------
-        m_ordinal = re.search(r"(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:one|result|link|item)", ref)
+        m_ordinal = re.search(
+            r"(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)(?:\s+(?:one|result|link|item|phone|laptop|product|article|source|website|option|recommendation|model))?",
+            ref,
+        )
         if m_ordinal:
             ord_word = m_ordinal.group(1).lower()
             ord_map = {

@@ -599,6 +599,73 @@ class CapabilityRegistry:
             )
         )
 
+        # 22. Live Web Intelligence: Web Search (Anakin)
+        def _exec_anakin_search(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+            from services.anakin_service import anakin_service
+            query = params.get("query", "")
+            limit = params.get("limit", 5)
+            res = anakin_service.search(query=query, limit=limit)
+            return {
+                "success": res.success,
+                "query": res.query,
+                "source_count": res.source_count,
+                "sources": [s.to_dict() for s in res.sources],
+                "message": f"Found {res.source_count} sources.",
+                "duration_ms": res.duration_ms,
+            }
+
+        self.register(
+            CapabilityDefinition(
+                name="web.live_search",
+                subsystem="web_intelligence",
+                description="Perform live external web search with citations via Anakin API.",
+                risk_level=RiskLevel.LOW,
+                handler=_exec_anakin_search,
+                verifier=lambda p, r, ctx: bool(r.get("success")),
+            )
+        )
+
+        # 23. Live Web Intelligence: Deep Agentic Research (Anakin)
+        def _exec_anakin_research(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
+            from services.anakin_service import anakin_service
+            query = params.get("query", "")
+            timeout = params.get("timeout", 120.0)
+            res = anakin_service.agentic_research(query=query, timeout=timeout)
+            return {
+                "success": res.success,
+                "query": res.query,
+                "summary": res.summary,
+                "structured_data": res.structured_data,
+                "source_count": res.source_count,
+                "sources": [s.to_dict() for s in res.sources],
+                "job_id": res.job_id,
+                "message": f"Completed deep research with {res.source_count} sources.",
+                "duration_ms": res.duration_ms,
+            }
+
+        self.register(
+            CapabilityDefinition(
+                name="web.agentic_research",
+                subsystem="web_intelligence",
+                description="Perform multi-source deep agentic research via Anakin API.",
+                risk_level=RiskLevel.LOW,
+                handler=_exec_anakin_research,
+                verifier=lambda p, r, ctx: bool(r.get("success") and r.get("summary")),
+            )
+        )
+
+    def get_health(self, capability_name: str | None = None) -> dict[str, Any]:
+        """Return truthful capability health report."""
+        if capability_name in ("web.live_search", "web.agentic_research", "live_web_research", "web_intelligence"):
+            from services.anakin_service import anakin_service
+            return anakin_service.health_check().to_dict()
+        if capability_name:
+            return {"capability": capability_name, "status": "AVAILABLE" if self.has(capability_name) else "UNAVAILABLE"}
+        return {
+            cap.name: {"subsystem": cap.subsystem, "status": "AVAILABLE"}
+            for cap in self.list_capabilities()
+        }
+
 
 # Global singleton CapabilityRegistry
 capability_registry = CapabilityRegistry()

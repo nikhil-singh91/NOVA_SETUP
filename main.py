@@ -30,6 +30,7 @@ from core.screen_recording import ScreenRecordingManager, screen_recording_manag
 from core.screenshot import ScreenshotService, screenshot_service
 from core.task_agent import TaskContext, TaskExecutor, TaskPlanner, task_executor
 from browser import BrowserManager
+from services.anakin_service import AnakinService, WebSource, anakin_service
 from desktop.manager import DesktopActionManager
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
@@ -125,6 +126,7 @@ class NovaApplication:
         self.recent_context = recent_interaction_context
         self.screen_recording_manager: ScreenRecordingManager = screen_recording_manager
         self.intent_engine: NaturalLanguageIntentEngine = NaturalLanguageIntentEngine()
+        self.anakin_service: AnakinService = anakin_service
 
         # Voice V2 Subsystem
         self.voice_manager: VoiceManager = VoiceManager()
@@ -904,6 +906,115 @@ class NovaApplication:
                     self._deliver_orchestrated_response(orch, turn_id)
                     return
 
+            # 3C-2. Live Web Intelligence (Anakin API Search & Agentic Research)
+            if structured_action.intent in (
+                CanonicalIntent.SEARCH_WEB,
+                CanonicalIntent.RESEARCH_TOPIC,
+            ):
+                q = structured_action.parameters.get("query") or user_text
+                is_deep = (
+                    structured_action.intent == CanonicalIntent.RESEARCH_TOPIC
+                    or structured_action.parameters.get("mode") == "agentic_search"
+                )
+                und_name = "Deep Web Research" if is_deep else "Live Web Research"
+                DashboardStatsManager.record_understood(
+                    und_name,
+                    details={
+                        "Query": q,
+                        "Mode": "agentic_search" if is_deep else "search",
+                        "Subsystem": "Anakin Live Web Intelligence",
+                    },
+                )
+
+                # Capability Check
+                health = self.anakin_service.health_check()
+                if not health.is_available:
+                    fail_msg = f"Live web research through Anakin is unavailable: {health.details}"
+                    DashboardStatsManager.record_action("Anakin research skipped (unavailable)")
+                    DashboardStatsManager.record_verify(health.details, success=False)
+                    DashboardStatsManager.record_result(fail_msg, success=False)
+                    self._deliver_response(fail_msg, turn_id)
+                    return
+
+                act_msg = (
+                    f"Anakin deep research started for '{q}'"
+                    if is_deep
+                    else f"Anakin web research started for '{q}'"
+                )
+                DashboardStatsManager.record_action(act_msg)
+
+                try:
+                    start_t = time.monotonic()
+                    if is_deep:
+                        res = self.anakin_service.agentic_research(query=q)
+                        sources_list = [s.to_dict() for s in res.sources]
+                        summary_text = res.summary
+                        sc_count = res.source_count
+                        ret_sources = res.sources
+                    else:
+                        res = self.anakin_service.search(query=q, limit=5)
+                        sources_list = [s.to_dict() for s in res.sources]
+                        summary_text = ""
+                        sc_count = res.source_count
+                        ret_sources = res.sources
+
+                    # Record to short-term task context for multi-turn follow-ups
+                    self.recent_context.record_web_research(
+                        query=q,
+                        sources=sources_list,
+                        summary=summary_text,
+                        mode="agentic_search" if is_deep else "search",
+                    )
+
+                    DashboardStatsManager.record_action(f"Anakin returned {sc_count} sources")
+                    DashboardStatsManager.record_verify("Live web research successful", success=True)
+                    DashboardStatsManager.record_result(f"Found {sc_count} sources", success=True)
+
+                    # Synthesize with existing LLM provider or direct fallback
+                    spoken = self._synthesize_web_research_response(
+                        query=q,
+                        sources=ret_sources,
+                        summary=summary_text,
+                        is_deep=is_deep,
+                    )
+                    self._deliver_response(spoken, turn_id)
+                    return
+
+                except Exception as exc:
+                    logger.error("Anakin research failed for '%s': %s", q, exc, exc_info=True)
+                    DashboardStatsManager.record_action("Anakin research failed")
+                    DashboardStatsManager.record_verify(f"Failure: {exc}", success=False)
+                    DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
+                    self._deliver_response(f"I couldn't complete web research because: {exc}", turn_id)
+                    return
+
+            # 3C-3. Open Web Research Result into Native Browser
+            if structured_action.intent == CanonicalIntent.OPEN_RESULT:
+                idx = structured_action.parameters.get("target_index", 1)
+                resolved = self.recent_context.resolve_reference(f"the {idx} result")
+                target_url = None
+                target_title = None
+                if resolved.resolved and resolved.target_type == "search_result" and isinstance(resolved.target_value, dict):
+                    target_url = resolved.target_value.get("url")
+                    target_title = resolved.target_value.get("title")
+                elif self.recent_context.last_search_results and 1 <= idx <= len(self.recent_context.last_search_results):
+                    item = self.recent_context.last_search_results[idx - 1]
+                    target_url = item.get("url")
+                    target_title = item.get("title")
+
+                if target_url:
+                    DashboardStatsManager.record_understood("Open Search Result", details={"Index": idx, "URL": target_url})
+                    DashboardStatsManager.record_action(f"Opening {target_title or target_url} in browser")
+                    self.browser_manager.execute_command(f"open {target_url}")
+                    DashboardStatsManager.record_verify(f"Opened result #{idx}", success=True)
+                    DashboardStatsManager.record_result(f"Opened {target_title or 'result'}", success=True)
+                    spoken = f"Opening {target_title or 'the result'} in your browser, Boss."
+                    self._deliver_response(spoken, turn_id)
+                    return
+                else:
+                    self._deliver_response(f"I couldn't find result number {idx} from the recent research.", turn_id)
+                    return
+
             # 3D. Autonomous Multi-Step Task Agent Dispatch
             if routing_domain == RoutingDomain.TASK_AGENT or structured_action.intent == CanonicalIntent.AUTONOMOUS_TASK:
                 self.task_planner.provider_mgr = self.provider_manager
@@ -1555,6 +1666,13 @@ class NovaApplication:
                 history_lines.append(f"{role}: {msg['content']}")
             prompt_text += "\n\n## Recent Conversation History\n" + "\n".join(history_lines) + "\n"
 
+        if self.recent_context and self.recent_context.last_search_results:
+            res_lines = [f"## Recent Live Web Research (Topic: {self.recent_context.last_search_query or 'Recent Search'})"]
+            for idx, item in enumerate(self.recent_context.last_search_results[:5], 1):
+                snippet = f" - {item.get('snippet')}" if item.get("snippet") else ""
+                res_lines.append(f"[{idx}] {item.get('title', 'Result')} ({item.get('url', '')}){snippet}")
+            prompt_text += "\n\n" + "\n".join(res_lines) + "\n"
+
         override_provider = self._manual_provider_override
         self._manual_provider_override = None
 
@@ -1612,6 +1730,69 @@ class NovaApplication:
         # Speak via Voice V2
         if self.voice_available:
             self.voice_manager.speak(clean_spk)
+
+    def _synthesize_web_research_response(
+        self,
+        query: str,
+        sources: list[WebSource],
+        summary: str = "",
+        is_deep: bool = False,
+    ) -> str:
+        """Synthesize natural NOVA response combining live intelligence sources and LLM reasoning."""
+        if not sources and not summary:
+            return f"I checked current web sources for '{query}', but didn't find any relevant results."
+
+        # Ensure ProviderManager is initialized
+        if self.provider_manager is None:
+            try:
+                from providers.provider_manager import ProviderManager
+                self.provider_manager = ProviderManager()
+            except Exception as exc:
+                logger.warning("Could not initialize ProviderManager: %s", exc)
+
+        if self.provider_manager:
+            try:
+                system_prompt = (
+                    "You are NOVA, an intelligent personal voice assistant. "
+                    "You have just retrieved verified live web research. "
+                    "Answer the user's question directly, concisely, and truthfully using the provided sources. "
+                    "Cite or attribute information naturally to the sources where helpful. "
+                    "Do NOT mention internal API keys, internal mechanics, or that you used 'Anakin API'. "
+                    "Speak naturally as NOVA ('I checked current web sources...')."
+                )
+                research_content = f"User Question: {query}\n\n"
+                if summary:
+                    research_content += f"Research Findings Summary:\n{summary}\n\n"
+                if sources:
+                    research_content += "Current Web Sources:\n"
+                    for s in sources[:5]:
+                        snippet_str = f" - {s.snippet}" if s.snippet else ""
+                        research_content += f"[{s.index}] {s.title} ({s.url}){snippet_str}\n"
+
+                res = self.provider_manager.generate_response(
+                    prompt=research_content,
+                    system_prompt=system_prompt,
+                    task_type="general",
+                )
+                if res and res.strip():
+                    return res.strip()
+            except Exception as exc:
+                logger.warning("LLM reasoning for research failed (%s), falling back to direct summary", exc)
+
+        # Direct fallback synthesis if LLM provider fails or is unavailable
+        if summary:
+            resp = f"I checked current web sources: {summary}"
+            if sources:
+                top_sources = "\n".join(f"• [{s.index}] {s.title}: {s.url}" for s in sources[:3])
+                resp += f"\n\nSources:\n{top_sources}"
+            return resp
+
+        resp = f"I checked current web sources for '{query}' and found {len(sources)} results:\n"
+        for s in sources[:3]:
+            resp += f"\n• [{s.index}] {s.title}: {s.url}"
+            if s.snippet:
+                resp += f"\n  {s.snippet[:120]}..."
+        return resp
 
     def _peek_active_provider(self, task_type: TaskType) -> str | None:
         if self.provider_manager is None:

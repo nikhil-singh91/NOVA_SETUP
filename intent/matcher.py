@@ -1188,7 +1188,7 @@ class LinguisticIntentMatcher:
         if m_find:
             query = m_find.group(1).strip()
             is_and_open = "and open" in txt or txt.startswith("show me ")
-            if query and not any(w in query for w in ["website", "site", "webpage", "google", "youtube", "weather", "news", "meaning", "tab", "next tab", "previous tab", "new tab"]):
+            if query and not any(w in query for w in ["website", "site", "webpage", "google", "youtube", "weather", "news", "meaning", "tab", "next tab", "previous tab", "new tab", "price", "prices", "latest", "current", "cost", "review", "reviews", "specification", "specs"]):
                 if is_and_open:
                     if "folder" in txt or query in ["downloads", "desktop", "documents"]:
                         return StructuredAction(
@@ -2205,23 +2205,50 @@ class LinguisticIntentMatcher:
                     normalized_input=norm_text,
                 )
 
-        # Web search variations:
-        # "browse the internet and search for most important books"
-        # "search the internet for most important books"
-        # "search the web for most important books"
-        # "browse the web for most important books"
-        # "look up most important books online"
-        # "look up most important books on the internet"
-        # "look up most important books"
-        # "search for most important books"
-        # "search on google for most important books"
-        # "search google for most important books"
-        # "google most important books"
+        # 1. Deep Multi-source Research / Comparisons
+        research_patterns = [
+            r"^(?:do\s+a\s+)?(?:deep\s+)?research\s+(?:on|about|into|for)?\s*(.+)$",
+            r"^(?:do\s+a\s+)?(?:detailed\s+)?comparison\s+(?:of|between)\s+(.+)$",
+            r"^compare\s+(.+)$",
+            r"^investigate\s+(.+)$",
+        ]
+        for pat in research_patterns:
+            m = re.search(pat, txt)
+            if m:
+                q = m.group(1).strip()
+                if q and q not in ("tab", "tabs", "folder", "camera", "photo", "this", "it"):
+                    return StructuredAction(
+                        intent=CanonicalIntent.RESEARCH_TOPIC,
+                        confidence=0.95,
+                        parameters={"query": q, "mode": "agentic_search"},
+                        raw_input=raw,
+                        normalized_input=norm_text,
+                    )
+
+        # 2. Live Web Search queries asking for latest news, current prices, or live facts
+        live_web_patterns = [
+            r"^(?:what(?:'s|\s+is)\s+the\s+)?(?:latest|current|recent)\s+(?:news|price|info|information|updates?)\s+(?:about|on|for|of)\s+(.+)$",
+            r"^find\s+(?:the\s+)?(?:latest|current|recent)\s+(?:price|news|information|info)\s+(?:of|for|about)\s+(.+)$",
+            r"^find\s+current\s+information\s+about\s+(.+)$",
+            r"^(?:what\s+are|find|show\s+me)\s+(?:the\s+)?best\s+(.+?\s+under\s+.+)$",
+        ]
+        for pat in live_web_patterns:
+            m = re.search(pat, txt)
+            if m:
+                return StructuredAction(
+                    intent=CanonicalIntent.SEARCH_WEB,
+                    confidence=0.95,
+                    parameters={"query": txt, "mode": "search"},
+                    raw_input=raw,
+                    normalized_input=norm_text,
+                )
+
+        # 3. Standard Web search variations:
         search_patterns = [
             r"^(?:browse\s+(?:the\s+)?(?:internet|web)\s+(?:and\s+)?(?:search\s+for|look\s+up|find)|search\s+(?:the\s+)?(?:internet|web)\s+for|browse\s+(?:the\s+)?(?:internet|web)\s+for)\s+(.+)$",
             r"^(?:look\s+up|search\s+for|search\s+online\s+for|find\s+online|search\s+google\s+for|search\s+on\s+google\s+for|google)\s+(.+?)(?:\s+(?:online|on\s+the\s+web|on\s+the\s+internet|on\s+google))?$",
             r"^(?:look\s+up)\s+(.+?)(?:\s+(?:online|on\s+the\s+web|on\s+the\s+internet|on\s+google))$",
-            r"^search\s+(?:for\s+)?(.+)$",
+            r"^search\s+(?:the\s+web\s+for\s+)?(?:for\s+)?(.+)$",
         ]
         for pat in search_patterns:
             m = re.search(pat, txt)
@@ -2232,7 +2259,7 @@ class LinguisticIntentMatcher:
                     return StructuredAction(
                         intent=CanonicalIntent.SEARCH_WEB,
                         confidence=0.95,
-                        parameters={"query": q},
+                        parameters={"query": q, "mode": "search"},
                         raw_input=raw,
                         normalized_input=norm_text,
                     )

@@ -276,7 +276,79 @@ NOVA maintains strict engineering discipline across every file:
 
 ---
 
-## 11. Contribution Guidelines
+## 11. Live Web Intelligence (Anakin API)
+
+NOVA integrates the official **Anakin API** (`anakin-sdk`) as its genuine runtime **Live Web Intelligence** layer. This provides real-time web retrieval, citations, and deep multi-source research grounded in current world information.
+
+### Architectural Separation of Responsibilities
+
+NOVA maintains a clean separation of concerns across external systems:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        NOVA SYSTEM ARCHITECTURE                         │
+├──────────────────────────┬──────────────────────┬───────────────────────┤
+│    ANAKIN INTELLIGENCE   │    BROWSER CONTROLS  │     LLM PROVIDERS     │
+├──────────────────────────┼──────────────────────┼───────────────────────┤
+│ • External web search    │ • macOS Chrome/Safari│ • Gemini, Groq,       │
+│ • Source citations & URLs│ • Tab management     │   OpenRouter, Cerebras│
+│ • Deep agentic research  │ • Page navigation    │ • Intent reasoning    │
+│ • Structured web data    │ • Visual clicking    │ • Response synthesis  │
+│ • Real-time grounding    │ • Form typing/scroll │ • Memory & emotion    │
+└──────────────────────────┴──────────────────────┴───────────────────────┘
+```
+
+- **Anakin API**: Serves strictly as the live web intelligence and external data acquisition layer.
+- **NOVA Browser System**: Controls local macOS Chrome/Safari (opening URLs, switching tabs, clicking, scrolling).
+- **NOVA AI Providers**: Multi-provider LLMs handle orchestration, reasoning, contextual conversation, and final speech formulation. Local commands (e.g. "Increase volume", "Open Telegram", "What is 2 + 2?") never call Anakin.
+
+### Supported Research Modes
+
+1. **Anakin Search (Mode 1)**: Fast, synchronous web search with normalized source citations (`WebSource`).
+   - *Example Queries*:
+     - *"What's the latest news about NVIDIA?"*
+     - *"Find the current price of iPhone 17."*
+     - *"What are the best laptops under ₹50,000?"*
+     - *"Search for the latest AI agent frameworks."*
+
+2. **Anakin Agentic Deep Research (Mode 2)**: Asynchronous multi-stage AI research pipeline for comprehensive investigations and multi-source comparisons.
+   - *Example Queries*:
+     - *"Research the best laptops under ₹50,000 for an AI/ML student and compare them."*
+     - *"Do a detailed comparison of the top AI coding agents in 2026."*
+     - *"Investigate this company and summarize what you find."*
+
+### Natural Context & Multi-Turn Follow-Ups
+
+Web research results are automatically stored in NOVA's transient short-term task context (`RecentInteractionContext`), enabling fluid contextual follow-ups without repeating the original query:
+
+1. **User**: *"Nova, search the web for the best smartphones under ₹20,000."*
+   - NOVA searches via Anakin, presents the top models with citations, and caches results in task context.
+2. **User**: *"Which one has the best camera?"*
+   - NOVA resolves *"which one"* against the cached research context and analyzes camera specifications.
+3. **User**: *"Open the first one."*
+   - NOVA resolves the URL from result #1 and hands it to `BrowserManager` to open the website in Chrome.
+
+### Configuration & Security
+
+1. Install the official SDK:
+   ```bash
+   pip install anakin-sdk>=0.1.0
+   ```
+2. Add your API key to `.env` (never committed):
+   ```bash
+   ANAKIN_API_KEY=ask_your_actual_key_here
+   ```
+3. Runtime Status & Self-Knowledge:
+   NOVA's `CapabilityRegistry` exposes truthful health reports:
+   - `AVAILABLE`: Key configured and operational.
+   - `CONFIGURATION_MISSING`: Truthfully informs the user that `ANAKIN_API_KEY` is needed in `.env`.
+   - `AUTHENTICATION_FAILED`: Identifies invalid or expired credentials.
+   - `INSUFFICIENT_CREDITS`: Reports account credit exhaustion without fabricating answers.
+   - **Secret Redaction**: Keys are never printed in logs, UI feeds, error traces, or voice responses.
+
+---
+
+## 12. Contribution Guidelines
 
 Until NOVA reaches a stable public phase, contributions follow a strict process to preserve architectural integrity:
 
@@ -289,7 +361,7 @@ Until NOVA reaches a stable public phase, contributions follow a strict process 
 
 ---
 
-## 12. License
+## 13. License
 
 This project is licensed under the **MIT License**.
 
@@ -319,7 +391,7 @@ THE SOFTWARE.
 
 ---
 
-## 13. Future Ideas
+## 14. Future Ideas
 
 Ideas beyond the current 10-phase roadmap, to be evaluated as NOVA matures:
 

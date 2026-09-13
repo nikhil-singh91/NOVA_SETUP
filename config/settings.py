@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         default=None,
         alias="GOOGLE_MAPS_API_KEY",
     )
+    anakin_api_key: SecretStr | None = Field(
+        default=None,
+        alias="ANAKIN_API_KEY",
+    )
 
     # ======================================================
     # APPLICATION
@@ -249,6 +253,7 @@ class Settings(BaseSettings):
         "openweather_api_key",
         "news_api_key",
         "google_maps_api_key",
+        "anakin_api_key",
         mode="after",
     )
     @classmethod
@@ -263,6 +268,14 @@ class Settings(BaseSettings):
             raise ValueError("API key cannot be empty.")
 
         return value
+
+    @property
+    def is_anakin_configured(self) -> bool:
+        """Return True if ANAKIN_API_KEY is present and non-empty."""
+        return bool(
+            self.anakin_api_key
+            and self.anakin_api_key.get_secret_value().strip()
+        )
 
     @field_validator("log_level", mode="after")
     @classmethod
