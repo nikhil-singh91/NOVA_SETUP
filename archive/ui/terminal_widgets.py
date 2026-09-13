@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+
 from ui.terminal_theme import TerminalTheme as T
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -20,26 +21,26 @@ def draw_box(title: str, lines: list[str], width: int) -> list[str]:
     """
     content_width = width - 4
     box = []
-    
+
     # Format header border
     header_title = f" {title} "
     title_len = len(header_title)
     if title_len > content_width:
         header_title = header_title[:content_width]
         title_len = len(header_title)
-        
+
     left_padding = 2
     right_padding = content_width - left_padding - title_len
-    
+
     top_line = (
-        T.TL + 
-        T.H * left_padding + 
-        T.colorize(header_title, T.CYAN + T.BOLD) + 
-        T.H * right_padding + 
+        T.TL +
+        T.H * left_padding +
+        T.colorize(header_title, T.CYAN + T.BOLD) +
+        T.H * right_padding +
         T.TR
     )
     box.append(top_line)
-    
+
     # Format content lines
     for line in lines:
         vis_len = visible_length(line)
@@ -48,10 +49,10 @@ def draw_box(title: str, lines: list[str], width: int) -> list[str]:
             # (or just strip raw line and pad)
             line = line[:content_width]
             vis_len = visible_length(line)
-            
+
         pad_size = content_width - vis_len
         box.append(f"{T.V} {line}{' ' * pad_size} {T.V}")
-        
+
     # Format bottom border
     box.append(T.BL + T.H * (content_width + 2) + T.BR)
     return box
@@ -81,7 +82,7 @@ def make_header_card(sys_info: dict[str, Any], width: int) -> list[str]:
         r" | |\  | |__| \__ / /\ \/ ____ \ ",
         r" |_| \_|\____/|___/_/  \_/_/    \_\ "
     ]
-    
+
     # Center ASCII logo
     centered_logo = []
     for line in logo:
@@ -97,7 +98,7 @@ def make_header_card(sys_info: dict[str, Any], width: int) -> list[str]:
         f" Platform:    {sys_info.get('os', 'macOS')} ({sys_info.get('arch', 'arm64')})",
         f" Python:      {sys_info.get('python', '3.12')}"
     ]
-    
+
     box_lines = draw_box("CORE DASHBOARD", info_lines, width)
     return centered_logo + [""] + box_lines
 
@@ -106,7 +107,7 @@ def make_health_card(health_results: dict[str, Any], width: int) -> list[str]:
     """Generate the card summarizing actual subsystems health status."""
     lines = []
     core_results = health_results.get("core", {})
-    
+
     for display_name, result in core_results.items():
         status_ind = get_status_indicator(result.get("status", "Healthy"))
         msg = result.get("message", "")
@@ -114,7 +115,7 @@ def make_health_card(health_results: dict[str, Any], width: int) -> list[str]:
         if len(msg) > 30:
             msg = msg[:27] + "..."
         lines.append(f" {display_name:<20} {status_ind:<15} {T.colorize(msg, T.GRAY)}")
-        
+
     return draw_box("SYSTEM HEALTH CHECK", lines, width)
 
 
@@ -136,14 +137,14 @@ def make_voice_card(voice_results: dict[str, Any], width: int) -> list[str]:
 def make_providers_card(provider_results: dict[str, Any], width: int) -> list[str]:
     """Show details of configured AI LLM providers and connection diagnostics."""
     lines = []
-    
+
     # Connection indicators
     for name in ["Gemini", "Groq", "OpenRouter", "Cerebras"]:
         info = provider_results.get(name, {"status": "Warning", "message": "API key missing"})
         indicator = get_status_indicator(info.get("status"))
         msg = info.get("message", "")
         lines.append(f" {name:<12} {indicator:<15} {T.colorize(msg, T.GRAY)}")
-        
+
     return draw_box("AI PROVIDERS", lines, width)
 
 
@@ -174,8 +175,8 @@ def make_performance_card(perf_results: dict[str, Any], width: int) -> list[str]
 def make_future_tech_card(width: int) -> list[str]:
     """Reserved tech stack grid showing placeholders for future implementations."""
     tech_modules = [
-        "Internet Services", "Computer Vision", "Camera Analytics", 
-        "Automation Engine", "Plugin Loader", "Calendar Actions", 
+        "Internet Services", "Computer Vision", "Camera Analytics",
+        "Automation Engine", "Plugin Loader", "Calendar Actions",
         "Browser Controller", "Smart Home Control", "Sound & Music"
     ]
     lines = []

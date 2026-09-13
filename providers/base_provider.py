@@ -35,10 +35,10 @@ module under ``providers/``.
 from __future__ import annotations
 
 import threading
-from typing import Final
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from typing import Final
 
 from core.exceptions import AIProviderError
 from core.logger import get_logger
@@ -362,8 +362,8 @@ class BaseProvider(ABC):
                 "[%s] health_check failed: %s", self.provider_name, exc
             )
             try:
-                from ui.health_checker import DashboardStatsManager
                 from providers.provider_manager import classify_provider_error
+                from ui.health_checker import DashboardStatsManager
                 err_status, err_msg, retry_after = classify_provider_error(exc)
                 DashboardStatsManager.record_provider_failure(
                     self.provider_name,

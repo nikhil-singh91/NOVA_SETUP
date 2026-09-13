@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from typing import Any
 
-from core.environment import environment_observer, log_environment_debug
+from core.environment import environment_observer
 from core.logger import get_logger
+
 from browser.engine import BaseBrowserEngine, log_browser_diagnostics
-from browser.models import ActionType, BrowserActionPlan, BrowserResult, Platform
+from browser.models import ActionType, BrowserActionPlan, BrowserResult
 from browser.sessions import BrowserSessionManager
 from browser.sites.base import BaseSiteSkill
 

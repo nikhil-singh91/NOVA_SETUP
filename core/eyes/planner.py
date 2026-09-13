@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Any
 
 from core.eyes.accessibility import SemanticElement, UIElementType
 from core.eyes.state import ScreenState

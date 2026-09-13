@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
-
 from config.settings import settings
-from intent.models import CanonicalIntent
 from intent.engine import NaturalLanguageIntentEngine
+from intent.models import CanonicalIntent
 from voice.audio_events import AudioEventDetector, AudioEventType
 from voice.speaker import clean_text_for_speech
 from voice.transcriber import (
     ASSISTANT_DOMAIN_PROMPT,
     ASSISTANT_HOTWORDS,
-    FasterWhisperTranscriber,
     TranscriptionManager,
 )
 

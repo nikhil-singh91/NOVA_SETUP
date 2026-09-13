@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -72,7 +72,7 @@ class MusicTrack(BaseModel):
     artist: str | None = None
     channel: str = ""
     url: str = ""
-    played_at: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
+    played_at: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
 
     @property
     def normalized_title(self) -> str:
@@ -89,7 +89,7 @@ class MusicPreference(BaseModel):
     genre: str | None = None
     mood: str | None = None
     language: str | None = None
-    updated_at: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
+    updated_at: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
 
     @property
     def is_empty(self) -> bool:
@@ -153,7 +153,7 @@ class ShortTermMusicContext(BaseModel):
     recently_played: list[MusicTrack] = Field(default_factory=list)
     current_track: MusicTrack | None = None
     last_action: str = ""
-    last_action_time: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
+    last_action_time: float = Field(default_factory=lambda: datetime.now(UTC).timestamp())
     rejected_video_ids: set[str] = Field(default_factory=set)
     max_history_size: int = 20
 
@@ -167,7 +167,7 @@ class ShortTermMusicContext(BaseModel):
     ) -> None:
         """Update active preference signals while maintaining session recency."""
         self.active = True
-        self.last_action_time = datetime.now(timezone.utc).timestamp()
+        self.last_action_time = datetime.now(UTC).timestamp()
         if override_all:
             self.preference = MusicPreference(
                 artist=artist,
@@ -204,7 +204,7 @@ class ShortTermMusicContext(BaseModel):
             artist=artist or self.preference.artist,
             channel=channel,
             url=url or f"https://www.youtube.com/watch?v={video_id}",
-            played_at=datetime.now(timezone.utc).timestamp(),
+            played_at=datetime.now(UTC).timestamp(),
         )
         self.current_track = track
         self.active = True
@@ -263,7 +263,7 @@ class ShortTermMusicContext(BaseModel):
 
     def is_fresh(self, max_age_seconds: float = 600.0) -> bool:
         """Check if music context is sufficiently fresh (default 10 minutes)."""
-        elapsed = datetime.now(timezone.utc).timestamp() - self.last_action_time
+        elapsed = datetime.now(UTC).timestamp() - self.last_action_time
         return self.active and (elapsed <= max_age_seconds)
 
     def deactivate(self) -> None:

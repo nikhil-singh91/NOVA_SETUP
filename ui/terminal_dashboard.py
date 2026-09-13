@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import getpass
-import os
-import platform
 import shutil
 import socket
 import sys
 import threading
 import time
-from collections import deque
 from typing import Any
 
+from core.event_bus import NovaEvent
+from core.logger import get_logger
+from core.registry import registry
 from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
@@ -21,10 +21,6 @@ from rich.progress_bar import ProgressBar
 from rich.table import Table
 from rich.text import Text
 
-from config.settings import settings
-from core.event_bus import NovaEvent
-from core.logger import get_logger
-from core.registry import registry
 from ui.health_checker import (
     ActivityInteraction,
     ActivityStep,

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
 
 from core.logger import get_logger
+
+from browser.auto_scroll import AutoScrollController, AutoScrollPolicy
 from browser.engine import BaseBrowserEngine
-from browser.auto_scroll import AutoScrollController, AutoScrollPolicy, AutoScrollState
 
 logger = get_logger(__name__)
 

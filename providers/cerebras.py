@@ -25,7 +25,6 @@ from collections.abc import Iterator
 from typing import Final
 
 from cerebras.cloud.sdk import APIConnectionError, APIStatusError, Cerebras, RateLimitError
-
 from config.settings import settings
 from core.exceptions import CerebrasError
 from core.logger import get_logger

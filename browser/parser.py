@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from core.logger import get_logger
+
 from browser.models import ActionType, BrowserActionPlan, Platform
 from browser.sites.generic import TRUSTED_SITES
 

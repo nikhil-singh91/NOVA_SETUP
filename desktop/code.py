@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any
 
 from core.logger import get_logger
 from core.registry import registry
+
 from desktop.apps import AppLauncher
 from desktop.files import FileSystemManager
 from desktop.models import DesktopActionType, DesktopResult

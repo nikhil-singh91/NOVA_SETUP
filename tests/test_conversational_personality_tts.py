@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 from personality.system_prompt import (
     LanguageMode,
-    PromptBuildContext,
     ProfileName,
+    PromptBuildContext,
     SystemPromptManager,
 )
 from voice.speaker import clean_text_for_speech
-
 
 # ==============================================================================
 # TTS Sanitization Tests

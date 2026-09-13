@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import queue
 import time
-import numpy as np
-import pytest
 
+import numpy as np
 from core.event_bus import EventBus, NovaEvent
-from voice.commands import CommandRecognizer, VoiceCommandRouter
-from voice.diagnostics import VoiceDiagnostics
+from voice.commands import VoiceCommandRouter
 from voice.manager import VoiceManager
 from voice.microphone import MicrophoneManager
-from voice.speaker import SpeakerManager, clean_text_for_speech
-from voice.state import SpeechOutputResult, TranscriptionResult, VADState, VoiceState
-from voice.transcriber import BaseTranscriber, FasterWhisperTranscriber, TranscriptionManager
+from voice.speaker import clean_text_for_speech
+from voice.state import VADState, VoiceState
+from voice.transcriber import TranscriptionManager
 from voice.vad import VoiceActivityDetector
-
 
 # ==============================================================================
 # TEST 1: Microphone Hardware Discovery

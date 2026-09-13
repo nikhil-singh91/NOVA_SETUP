@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from core.computer_agent import ComputerAgent
 from core.visual.models import (
@@ -12,8 +11,6 @@ from core.visual.models import (
     ScreenSnapshot,
     UIElement,
     UIElementType,
-    VisualActionType,
-    VisualConfidence,
 )
 from core.visual.observer import ScreenObserver
 

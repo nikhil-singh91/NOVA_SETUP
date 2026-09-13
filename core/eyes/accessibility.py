@@ -7,17 +7,19 @@ Includes event-driven NSWorkspace lifecycle observers and sensitive data detecti
 
 from __future__ import annotations
 
-import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 import AppKit
+
 AppKit: Any = AppKit
 NSWorkspace: Any = getattr(AppKit, "NSWorkspace", None)
 import ApplicationServices
+
 AS: Any = ApplicationServices
 from core.logger import get_logger
 

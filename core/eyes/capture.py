@@ -10,10 +10,11 @@ import hashlib
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import Quartz
+
 Quartz: Any = Quartz
 from core.logger import get_logger
 
@@ -126,7 +127,7 @@ class MemoryFrame:
 
     @property
     def age_seconds(self) -> float:
-        return (datetime.now(timezone.utc) - self.timestamp).total_seconds()
+        return (datetime.now(UTC) - self.timestamp).total_seconds()
 
     def is_fresh(self, max_age_seconds: float = 3.0) -> bool:
         return self.age_seconds <= max_age_seconds
@@ -341,7 +342,7 @@ class ScreenCapturer:
             # Strictly replace latest frame — drops stale frame immediately
             frame = MemoryFrame(
                 frame_id=frame_id,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 cg_image=None,
                 pixel_buffer=pixel_buffer,
                 metrics=metrics,
@@ -419,7 +420,7 @@ class ScreenCapturer:
 
         frame = MemoryFrame(
             frame_id=frame_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             cg_image=cg_image,
             pixel_buffer=None,
             metrics=metrics,

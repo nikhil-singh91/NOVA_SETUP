@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any
 
-from core.eyes.accessibility import SemanticElement, UIElementType
+from core.eyes.accessibility import SemanticElement
 from core.eyes.capture import DisplayMetrics
 from core.logger import get_logger
 

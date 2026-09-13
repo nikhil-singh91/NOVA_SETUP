@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import time
+from intent.normalizer import TextNormalizer
 from main import NovaApplication, TurnRequest
 from ui.health_checker import DashboardStatsManager
-from intent.normalizer import TextNormalizer
 
 app = NovaApplication()
 responses: list[str] = []

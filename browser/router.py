@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import time
+
 from core.logger import get_logger
 from core.registry import registry
+
 from browser.context import BrowserContextManager
 from browser.engine import BaseBrowserEngine, log_browser_diagnostics
-from browser.models import ActionType, BrowserActionPlan, BrowserResult, PageContent, Platform
+from browser.models import ActionType, BrowserActionPlan, BrowserResult, PageContent
 from browser.sessions import BrowserSessionManager
 from browser.sites import (
     AmazonSkill,

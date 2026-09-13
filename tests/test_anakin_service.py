@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from services.anakin_service import (
     AnakinAuthenticationError,
     AnakinConfigurationError,
@@ -19,7 +17,6 @@ from services.anakin_service import (
     AnakinTimeoutError,
     CapabilityHealth,
     CapabilityStatus,
-    WebSource,
 )
 
 

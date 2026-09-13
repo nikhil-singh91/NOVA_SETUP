@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
-import time
-import pytest
 from core.event_bus import EventBus, NovaEvent
-from ui.backend.models import AvatarState, CommandRequest, UIEvent, UIEventType
-from ui.backend.event_bridge import EventBridge
 from ui.backend.command_gateway import CommandGateway
+from ui.backend.event_bridge import EventBridge
+from ui.backend.models import AvatarState, CommandRequest, UIEventType
 from ui.backend.server import NovaUIServer
 
 

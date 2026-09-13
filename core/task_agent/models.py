@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -63,7 +62,7 @@ class TaskGoal:
     constraints: list[str] = field(default_factory=list)
     risk_level: RiskLevel = RiskLevel.LOW
     status: TaskStatus = TaskStatus.PENDING
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -98,7 +97,7 @@ class TaskPlan:
     task_id: str
     goal: TaskGoal
     steps: list[TaskStep] = field(default_factory=list)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     status: TaskStatus = TaskStatus.PENDING
     current_step_index: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)

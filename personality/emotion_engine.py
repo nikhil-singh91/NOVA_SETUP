@@ -44,10 +44,11 @@ from __future__ import annotations
 
 import re
 import threading
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Callable, Final, Mapping, Sequence
+from typing import Final
 
 from core.exceptions import NovaError
 from core.logger import get_logger
@@ -1078,7 +1079,7 @@ class EmotionEngine:
             mode_scores=dict(mode_scores),
             recommended_tone=recommended_tone,
             use_humor=use_humor,
-            analyzed_at=datetime.now(timezone.utc),
+            analyzed_at=datetime.now(UTC),
         )
 
         logger.debug(

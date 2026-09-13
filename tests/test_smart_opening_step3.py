@@ -7,10 +7,10 @@ conversational wrapper stripping, and execution routing across all 12+ user test
 from __future__ import annotations
 
 import pytest
+from browser.sites.generic import TRUSTED_SITES, GenericSiteSkill
+from desktop.apps import AppLauncher
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
-from desktop.apps import AppLauncher
-from browser.sites.generic import GenericSiteSkill, TRUSTED_SITES
 
 
 @pytest.fixture

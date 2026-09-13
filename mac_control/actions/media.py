@@ -4,22 +4,24 @@ from __future__ import annotations
 
 import re
 import subprocess
-import urllib.request
 import urllib.parse
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+import urllib.request
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
+
 
 def execute_media_command(cmd: MacCommand) -> ExecutionResult:
     """Execute playback actions or parse queries to launch YouTube autoplay streams."""
     action = cmd.action
     args = cmd.args
-    
+
     try:
         if action == "play_song":
             song_query = args.get("song", "").strip()
             if not song_query:
                 # If no song is specified, just resume playback
                 return _toggle_play_state("play")
-                
+
             # Attempt to retrieve first YouTube video ID for autoplay
             video_id = _get_first_youtube_video(song_query)
             if video_id:
@@ -43,10 +45,10 @@ def execute_media_command(cmd: MacCommand) -> ExecutionResult:
                     category=CommandCategory.MEDIA,
                     details={"song": song_query, "url": url}
                 )
-                
+
         elif action in ("pause", "resume", "stop", "next", "previous"):
             return _toggle_play_state(action)
-            
+
     except Exception as exc:
         return ExecutionResult(
             status=ExecutionStatus.FAILED,
@@ -54,7 +56,7 @@ def execute_media_command(cmd: MacCommand) -> ExecutionResult:
             command_name="Media Control",
             category=CommandCategory.MEDIA
         )
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown media action: {action}",
@@ -89,11 +91,11 @@ def _get_first_youtube_video(query: str) -> str | None:
 def _toggle_play_state(state: str) -> ExecutionResult:
     """Send play state change commands to active music player (Spotify or Apple Music)."""
     player = _get_active_player()
-    
+
     if not player:
         # Default fallback to Apple Music
         player = "Music"
-        
+
     # Map command states to AppleScript verbs
     script_verbs = {
         "play": "play",
@@ -103,9 +105,9 @@ def _toggle_play_state(state: str) -> ExecutionResult:
         "next": "next track",
         "previous": "previous track"
     }
-    
+
     verb = script_verbs.get(state, "play")
-    
+
     try:
         script = f'tell application "{player}" to {verb}'
         subprocess.run(["osascript", "-e", script], check=True)
@@ -133,7 +135,7 @@ def _get_active_player() -> str | None:
         )
         if res.stdout.strip() == "true":
             return "Spotify"
-            
+
         # Check Apple Music
         res = subprocess.run(
             ["osascript", "-e", 'application "Music" is running'],

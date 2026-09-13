@@ -13,7 +13,6 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from core.logger import get_logger
 
@@ -213,7 +212,7 @@ class ScreenshotService:
             target_path = self._generate_unique_filepath(custom_filename)
 
             try:
-                res = subprocess.run(["screencapture", "-i", str(target_path)], capture_output=True, text=True)
+                subprocess.run(["screencapture", "-i", str(target_path)], capture_output=True, text=True)
                 if target_path.exists() and target_path.stat().st_size > 0:
                     logger.info("Screenshot saved: '%s'", target_path)
                     return ScreenshotResult(success=True, file_path=target_path, filename=target_path.name)
@@ -233,7 +232,7 @@ class ScreenshotService:
             target_path = self._generate_unique_filepath(custom_filename)
 
             try:
-                res = subprocess.run(["screencapture", "-w", str(target_path)], capture_output=True, text=True)
+                subprocess.run(["screencapture", "-w", str(target_path)], capture_output=True, text=True)
                 if target_path.exists() and target_path.stat().st_size > 0:
                     logger.info("Screenshot saved: '%s'", target_path)
                     return ScreenshotResult(success=True, file_path=target_path, filename=target_path.name)

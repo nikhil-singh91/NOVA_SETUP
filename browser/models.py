@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -73,7 +73,7 @@ class PageContent:
     headings: list[str] = field(default_factory=list)
     links: list[dict[str, str]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
-    extracted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    extracted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def is_empty(self) -> bool:
@@ -114,7 +114,7 @@ class BrowserTaskPlan:
     max_steps: int = 6
     requires_confirmation: bool = False
     confirmation_prompt: str = ""
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -151,7 +151,7 @@ class BrowserResult:
     page_content: PageContent | None = None
     task_plan: BrowserTaskPlan | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if not self.spoken_response and self.message:

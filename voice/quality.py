@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
 
 from core.logger import get_logger
+
 from voice.state import QualityCheckResult, QualityDecision, TranscriptionResult
 
 logger = get_logger(__name__)

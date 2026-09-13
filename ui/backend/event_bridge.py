@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 import threading
-import time
-from typing import Any, Callable
+from typing import Any
 
 from core.event_bus import EventBus, NovaEvent
 from core.logger import get_logger
+
 from ui.backend.models import AvatarState, PrivacyState, UIEvent, UIEventType
 
 logger = get_logger(__name__)

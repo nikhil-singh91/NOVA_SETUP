@@ -8,12 +8,11 @@ and deterministically resolving natural references ("this", "that", "it", "here"
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import threading
 import urllib.parse
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +26,7 @@ logger = get_logger(__name__)
 class EnvironmentContext:
     """Canonical representation of the user's current computing environment."""
 
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # Real macOS State
     active_application: str | None = None
@@ -130,7 +129,7 @@ class EnvironmentObserver:
 
     def refresh(self, force: bool = False) -> EnvironmentContext:
         """Capture real-time OS state: active application, window title, browser tab, Finder selection."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             # Check cache TTL unless force requested
             if not force and (datetime.now().timestamp() - self._last_refresh_time) < self._cache_ttl_seconds:

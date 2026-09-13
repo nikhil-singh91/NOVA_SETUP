@@ -48,11 +48,12 @@ import json
 import os
 import tempfile
 import threading
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Final, Sequence
+from typing import Any, Final
 
 from core.exceptions import NovaError
 from core.logger import get_logger
@@ -340,7 +341,7 @@ class NovaPreferences:
     greeting_style: GreetingStyle = GreetingStyle.WARM
     conversation_style: ConversationStyle = ConversationStyle.FRIENDLY
     custom_instructions: tuple[str, ...] = field(default_factory=tuple)
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize these preferences into a JSON-compatible dictionary.
@@ -400,7 +401,7 @@ class NovaPreferences:
                     str(instruction) for instruction in data.get("custom_instructions", [])
                 ),
                 updated_at=datetime.fromisoformat(
-                    data.get("updated_at", datetime.now(timezone.utc).isoformat())
+                    data.get("updated_at", datetime.now(UTC).isoformat())
                 ),
             )
         except (KeyError, ValueError, TypeError) as exc:
@@ -1858,7 +1859,7 @@ class SystemPromptManager:
                     if custom_instructions is _UNSET
                     else _validate_custom_instructions(custom_instructions)
                 ),
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
 
             self._preferences = updated
@@ -2028,7 +2029,7 @@ class SystemPromptManager:
 
     def _quarantine_corrupted_preferences(self) -> None:
         """Rename a corrupted preferences file aside so it is not lost or reused."""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         quarantine_path = self._storage_path.with_name(
             f"{self._storage_path.stem}.corrupted-{timestamp}{self._storage_path.suffix}"
         )

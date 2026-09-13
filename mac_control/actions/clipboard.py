@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import subprocess
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
+
 
 def execute_clipboard_command(cmd: MacCommand) -> ExecutionResult:
     """Execute system clipboard buffer operations."""
     action = cmd.action
     args = cmd.args
-    
+
     try:
         if action == "copy":
             text = args.get("text", "").strip()
@@ -20,11 +22,11 @@ def execute_clipboard_command(cmd: MacCommand) -> ExecutionResult:
                     command_name="Copy to Clipboard",
                     category=CommandCategory.CLIPBOARD
                 )
-            
+
             # Pipe text to pbcopy
             process = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE, text=True)
             process.communicate(input=text)
-            
+
             # Truncate text preview for details message
             preview = text if len(text) <= 30 else text[:27] + "..."
             return ExecutionResult(
@@ -34,11 +36,11 @@ def execute_clipboard_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.CLIPBOARD,
                 details={"text": text}
             )
-            
+
         elif action == "paste" or action == "read":
             res = subprocess.run(["pbpaste"], capture_output=True, text=True, check=True)
             clip_text = res.stdout.strip()
-            
+
             # Truncate text preview for details message
             preview = clip_text if len(clip_text) <= 30 else clip_text[:27] + "..."
             return ExecutionResult(
@@ -48,7 +50,7 @@ def execute_clipboard_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.CLIPBOARD,
                 details={"text": clip_text}
             )
-            
+
         elif action == "clear":
             # Pipe empty string to pbcopy
             process = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE, text=True)
@@ -59,7 +61,7 @@ def execute_clipboard_command(cmd: MacCommand) -> ExecutionResult:
                 command_name="Clear Clipboard",
                 category=CommandCategory.CLIPBOARD
             )
-            
+
     except Exception as exc:
         return ExecutionResult(
             status=ExecutionStatus.FAILED,
@@ -67,7 +69,7 @@ def execute_clipboard_command(cmd: MacCommand) -> ExecutionResult:
             command_name="Clipboard Control",
             category=CommandCategory.CLIPBOARD
         )
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown clipboard action: {action}",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mac_control.manager import MacControlManager
-from mac_control.models import MacCommand, ExecutionResult, ExecutionStatus, CommandCategory
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 
 __all__ = [
     "MacControlManager",

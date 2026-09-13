@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import json
 import threading
-import time
-import pytest
+from typing import Any
 
-from core.event_bus import EventBus, NovaEvent
-from core.registry import registry
+import pytest
 from browser.context import BrowserContextManager
 from browser.engine import BaseBrowserEngine
 from browser.extractor import PageContentExtractor
@@ -17,20 +15,18 @@ from browser.models import (
     ActionType,
     BrowserActionCancelled,
     BrowserActionPlan,
-    BrowserContext,
-    BrowserResult,
     BrowserTaskCancelled,
     BrowserTaskPlan,
     PageContent,
     Platform,
-    SearchResultItem,
 )
 from browser.parser import BrowserIntentParser
 from browser.planner import BrowserTaskPlanner
 from browser.router import BrowserActionRouter
-from browser.safety import BrowserSafetyPolicy
 from browser.sessions import BrowserSessionManager
-from browser.sites import AmazonSkill, GenericSiteSkill, GitHubSkill, GoogleSkill, YouTubeSkill
+from browser.sites import AmazonSkill, GitHubSkill
+from core.event_bus import EventBus, NovaEvent
+from core.registry import registry
 
 
 class MockBrowserEngineV2(BaseBrowserEngine):
@@ -124,7 +120,7 @@ class MockBrowserEngineV2(BaseBrowserEngine):
         self.history_actions.append("forward")
         return True
 
-    def scroll_page(self, direction: str = "down", amount: int = 500) -> bool:
+    def scroll_page(self, direction: str = "down", amount: str | int = 500) -> bool:
         self.scroll_actions.append(f"scroll_{direction}_{amount}")
         return True
 
@@ -163,17 +159,6 @@ class MockBrowserEngineV2(BaseBrowserEngine):
     def press_key(self, key_name: str) -> bool:
         self.history_actions.append(f"press_key:{key_name}")
         return True
-
-    def extract_page_content(self) -> PageContent:
-        extractor = PageContentExtractor()
-        return extractor.extract_page(self)
-
-    def extract_search_results(self, limit: int = 5) -> list[dict[str, str]]:
-        return [
-            {"title": "Python FastAPI Guide", "url": "https://fastapi.tiangolo.com", "snippet": "FastAPI is modern web framework"},
-            {"title": "Django Documentation", "url": "https://djangoproject.com", "snippet": "The web framework for perfectionists"},
-            {"title": "Flask Web Development", "url": "https://flask.palletsprojects.com", "snippet": "A lightweight WSGI web framework"}
-        ][:limit]
 
     def shutdown(self) -> None:
         self._is_initialized = False

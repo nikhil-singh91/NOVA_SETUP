@@ -2,29 +2,30 @@
 
 from __future__ import annotations
 
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
-from mac_control.actions.wifi import execute_wifi_command
 from mac_control.actions.bluetooth import execute_bluetooth_command
+from mac_control.actions.wifi import execute_wifi_command
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
+
 
 def execute_network_command(cmd: MacCommand) -> ExecutionResult:
     """Route network related commands to their specific WiFi/Bluetooth handlers."""
     action = cmd.action
     target = cmd.args.get("target", "all").lower().strip()
-    
+
     if target == "wifi":
         return execute_wifi_command(cmd)
     elif target == "bluetooth":
         return execute_bluetooth_command(cmd)
-        
+
     # If generic status query
     if action == "get":
         try:
             wifi_res = execute_wifi_command(MacCommand(CommandCategory.NETWORK, "get", cmd.raw_input))
             bt_res = execute_bluetooth_command(MacCommand(CommandCategory.NETWORK, "get", cmd.raw_input))
-            
+
             wifi_msg = wifi_res.message if wifi_res.status == ExecutionStatus.SUCCESS else "WiFi status unknown"
             bt_msg = bt_res.message if bt_res.status == ExecutionStatus.SUCCESS else "Bluetooth status unknown"
-            
+
             return ExecutionResult(
                 status=ExecutionStatus.SUCCESS,
                 message=f"{wifi_msg} | {bt_msg}",
@@ -42,7 +43,7 @@ def execute_network_command(cmd: MacCommand) -> ExecutionResult:
                 command_name="Get Network Status",
                 category=CommandCategory.NETWORK
             )
-            
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown generic network operation: {action} (Target: {target})",

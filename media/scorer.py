@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+
 from core.logger import get_logger
-from media.models import MediaRequest, MediaType, VideoCandidate, ShortTermMusicContext
+
+from media.models import MediaRequest, MediaType, ShortTermMusicContext, VideoCandidate
 
 logger = get_logger(__name__)
 

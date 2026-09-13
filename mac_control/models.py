@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, InitVar
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
 
 class CommandCategory(str, Enum):
     VOLUME = "Volume"
@@ -36,11 +37,21 @@ class MacCommand:
     raw_input: str = ""
     args: dict[str, Any] = field(default_factory=dict)
     is_dangerous: bool = False
-    raw_text: InitVar[str | None] = None
 
-    def __post_init__(self, raw_text: str | None = None) -> None:
-        if raw_text is not None and not self.raw_input:
-            self.raw_input = raw_text
+    def __init__(
+        self,
+        category: CommandCategory,
+        action: str,
+        raw_input: str = "",
+        args: dict[str, Any] | None = None,
+        is_dangerous: bool = False,
+        raw_text: str | None = None,
+    ) -> None:
+        self.category = category
+        self.action = action
+        self.raw_input = raw_input or (raw_text or "")
+        self.args = args if args is not None else {}
+        self.is_dangerous = is_dangerous
 
     @property
     def raw_text(self) -> str:

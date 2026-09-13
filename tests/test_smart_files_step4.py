@@ -8,13 +8,12 @@ project scaffolding, renaming, safe deletion with confirmation, and multi-step t
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 
+import pytest
 from desktop.files import FileSystemManager
 from desktop.manager import DesktopActionManager
-from desktop.models import DesktopActionType, DesktopResult
-from desktop.parser import DesktopIntentParser
+from desktop.models import DesktopActionType
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
 

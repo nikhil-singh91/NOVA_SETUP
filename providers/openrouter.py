@@ -26,11 +26,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Final
 
-from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
-
 from config.settings import settings
 from core.exceptions import OpenRouterError
 from core.logger import get_logger
+from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 from providers.base_provider import BaseProvider
 
 logger = get_logger(__name__)

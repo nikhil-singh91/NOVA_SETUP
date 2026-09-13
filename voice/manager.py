@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import threading
-import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
-
 from config.settings import settings
 from core.event_bus import NovaEvent
 from core.logger import get_logger
 from core.registry import registry
+
 from voice.listener import VoiceListener
 from voice.microphone import MicrophoneManager
 from voice.preprocessing import AudioPreprocessor

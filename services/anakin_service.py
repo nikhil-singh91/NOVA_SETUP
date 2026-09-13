@@ -11,12 +11,12 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from config.settings import settings
-from core.exceptions import AuthenticationError, NetworkError, NovaError, SearchError
+from core.exceptions import AuthenticationError, NetworkError, SearchError
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -65,7 +65,7 @@ class CapabilityHealth:
     )
     limitations: str = "Requires valid internet connectivity and active Anakin credits."
     last_checked: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
     details: str = ""
 
@@ -291,9 +291,8 @@ class AnakinService:
     def health_check(self, ping: bool = False) -> CapabilityHealth:
         """Return truthful runtime capability health."""
         # 1. Dependency Check
-        try:
-            import anakin
-        except ImportError:
+        import importlib.util
+        if importlib.util.find_spec("anakin") is None:
             health = CapabilityHealth(
                 status=CapabilityStatus.DEPENDENCY_MISSING,
                 is_available=False,

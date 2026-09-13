@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from core.logger import get_logger
-from browser.models import ActionType, BrowserActionPlan
+
+from browser.models import BrowserActionPlan
 
 logger = get_logger(__name__)
 

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-from media.models import MediaRequest, MediaType, VideoCandidate
+from media.models import MediaType, VideoCandidate
 from media.parser import MediaRequestParser
 from media.refiner import SearchQueryRefiner
 from media.scorer import MediaMatchScorer
 from media.service import MediaPlaybackService
-
 
 # ==============================================================================
 # TEST 1: Structured Media Request Parsing

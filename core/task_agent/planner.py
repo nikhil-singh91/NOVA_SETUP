@@ -5,14 +5,11 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Any
 
 from core.logger import get_logger
 from core.task_agent.models import (
-    RiskLevel,
     TaskGoal,
     TaskPlan,
-    TaskStatus,
     TaskStep,
 )
 from core.task_agent.registry import CapabilityRegistry, capability_registry

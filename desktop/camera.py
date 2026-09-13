@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from config.settings import settings
 from core.event_bus import NovaEvent
 from core.logger import get_logger
 from core.registry import registry
+
 from desktop.apps import AppLauncher
 from desktop.models import DesktopActionType, DesktopResult
 
@@ -56,7 +56,7 @@ class CameraManager:
         self._publish_event(NovaEvent.CAMERA_CAPTURE_STARTED)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         target_name = filename or f"photo_{ts}.jpg"
         if not target_name.endswith((".jpg", ".jpeg", ".png")):
             target_name += ".jpg"
@@ -82,7 +82,7 @@ class CameraManager:
                 str(target_path),
             ]
             try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=8.0)
+                subprocess.run(cmd, capture_output=True, text=True, timeout=8.0)
                 if target_path.exists() and target_path.stat().st_size > 0:
                     logger.info("Photo captured successfully via FFmpeg: %s (%d bytes)", target_path, target_path.stat().st_size)
                     self._publish_event(NovaEvent.CAMERA_CAPTURE_COMPLETED, path=str(target_path))
@@ -101,7 +101,7 @@ class CameraManager:
         imagesnap_bin = shutil.which("imagesnap")
         if imagesnap_bin:
             try:
-                proc = subprocess.run([imagesnap_bin, str(target_path)], capture_output=True, text=True, timeout=8.0)
+                subprocess.run([imagesnap_bin, str(target_path)], capture_output=True, text=True, timeout=8.0)
                 if target_path.exists() and target_path.stat().st_size > 0:
                     logger.info("Photo captured successfully via ImageSnap: %s", target_path)
                     self._publish_event(NovaEvent.CAMERA_CAPTURE_COMPLETED, path=str(target_path))

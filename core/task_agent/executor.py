@@ -6,22 +6,17 @@ import os
 import threading
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.environment import EnvironmentContext, environment_observer
 from core.logger import get_logger
 from core.task_agent.models import (
-    FailureType,
-    RiskLevel,
     StepStatus,
     TaskContext,
-    TaskGoal,
     TaskPlan,
     TaskResult,
     TaskStatus,
-    TaskStep,
 )
 from core.task_agent.registry import CapabilityRegistry, capability_registry
 from core.task_agent.replanner import DynamicReplanner
@@ -136,7 +131,7 @@ class TaskExecutor:
 
             current_step = step_queue.pop(0)
             current_step.status = StepStatus.RUNNING
-            current_step.started_at = datetime.now(timezone.utc)
+            current_step.started_at = datetime.now(UTC)
 
             # 2. Dependency Validation
             if not plan.are_dependencies_met(current_step):
@@ -200,7 +195,7 @@ class TaskExecutor:
             # 7. Evaluate Step Outcome & Replanning
             if step_success:
                 current_step.status = StepStatus.COMPLETED
-                current_step.completed_at = datetime.now(timezone.utc)
+                current_step.completed_at = datetime.now(UTC)
                 ctx.completed_steps.append(current_step.step_id)
                 completed_count += 1
                 log_task_agent_debug("STEP_COMPLETED", {"step_id": current_step.step_id})

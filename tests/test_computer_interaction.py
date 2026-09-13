@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+
 from core.visual.interaction import ComputerInteractionManager
 from core.visual.models import ScreenSnapshot, UIElement, UIElementType
 

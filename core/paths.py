@@ -35,9 +35,9 @@ import threading
 from pathlib import Path
 from typing import Final
 
+from core.constants import ASSETS_DIR as _ASSETS_DIR_RELATIVE
 from core.constants import CACHE_DIR as _CACHE_DIR_RELATIVE
 from core.constants import DATA_DIR as _DATA_DIR_RELATIVE
-from core.constants import ASSETS_DIR as _ASSETS_DIR_RELATIVE
 from core.constants import LOG_DIR as _LOG_DIR_RELATIVE
 from core.constants import MEMORY_DIR as _MEMORY_DIR_RELATIVE
 from core.constants import MODELS_DIR as _MODELS_DIR_RELATIVE
@@ -153,7 +153,7 @@ def ensure_directories(*, force: bool = False) -> None:
         _directories_ensured = True
         logger.info(
             "NOVA directories initialized successfully."
-        )       
+        )
 
 
 # Ensure every working directory exists as soon as this module is

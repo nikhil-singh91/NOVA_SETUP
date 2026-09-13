@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
-from typing import Any
 
 from core.logger import get_logger
 from core.visual.models import (

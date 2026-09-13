@@ -11,24 +11,20 @@ Covers:
 
 from __future__ import annotations
 
-import os
-import re
-from unittest.mock import MagicMock, patch
+from datetime import UTC
+from unittest.mock import MagicMock
 
 import pytest
-
 from browser.models import ActionType, BrowserActionPlan, BrowserResult, Platform
 from browser.sites.youtube import YouTubeSkill
-from core.eyes.state import ScreenState
 from core.eyes.capture import DisplayMetrics
+from core.eyes.state import ScreenState
 from intent.engine import NaturalLanguageIntentEngine
 from intent.matcher import LinguisticIntentMatcher
 from intent.models import CanonicalIntent, StructuredAction
-from intent.normalizer import TextNormalizer
 from media.models import MediaRequest, MediaType, VideoCandidate
 from media.parser import MediaRequestParser
 from media.scorer import MediaMatchScorer
-from media.service import MediaPlaybackService
 from personality.response_orchestrator import ResponseOrchestrator
 
 
@@ -153,7 +149,7 @@ class TestGenericMediaResolutionAndScoring:
         assert score == 0.0, f"Expected 0.0 for unrelated tutorial, got {score}"
 
     def test_no_hardcoded_songs_in_media_parser(self) -> None:
-        with open("media/parser.py", "r") as f:
+        with open("media/parser.py") as f:
             code = f.read().lower()
         for forbidden in ["kalank", "kaland", "kesariya", "mere liye", "believer"]:
             assert forbidden not in code, f"Forbidden hardcoded song '{forbidden}' found in media/parser.py"
@@ -215,9 +211,9 @@ class TestScreenPerceptionWithNOVAEyes:
     """Test that screen questions produce human-friendly, context-aware descriptions."""
 
     def test_natural_screen_description_youtube(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
         state = ScreenState(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             active_application="Google Chrome",
             active_window="Kalank Title Track - YouTube",
             metrics=DisplayMetrics.get_primary_metrics(),
@@ -234,9 +230,9 @@ class TestScreenPerceptionWithNOVAEyes:
         assert "dekh rahe ho" in desc_hi
 
     def test_natural_screen_description_vscode(self) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
         state = ScreenState(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             active_application="Visual Studio Code",
             active_window="NOVA_SETUP — main.py",
             metrics=DisplayMetrics.get_primary_metrics(),

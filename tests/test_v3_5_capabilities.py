@@ -1,11 +1,10 @@
 """Verification of newly connected capabilities and Task Agent registry in NOVA V3.5."""
 
-import pytest
-from core.task_agent.registry import capability_registry, CapabilityRegistry
 from core.task_agent.models import TaskContext
+from core.task_agent.registry import capability_registry
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
-from intent.router import get_routing_domain, RoutingDomain
+from intent.router import RoutingDomain, get_routing_domain
 
 
 class TestCapabilityRegistryV35:

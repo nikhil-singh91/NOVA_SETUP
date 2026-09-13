@@ -11,13 +11,14 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
 
 from core.logger import get_logger
-from browser.engine import BaseBrowserEngine
 from ui.health_checker import DashboardStatsManager
+
+from browser.engine import BaseBrowserEngine
 
 logger = get_logger(__name__)
 
@@ -381,7 +382,7 @@ class AutoScrollController:
 
             # 4. SCROLL Phase
             self._set_state(AutoScrollState.SCROLLING)
-            success = self._dispatch_scroll_action()
+            self._dispatch_scroll_action()
 
             # 5. UI Stabilization Wait
             self._interruptible_sleep(self.policy.settle_time_seconds)

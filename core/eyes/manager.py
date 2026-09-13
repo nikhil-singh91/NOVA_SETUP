@@ -10,20 +10,19 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from core.eyes.accessibility import (
     AccessibilityInspector,
     SemanticElement,
     WorkspaceEventsObserver,
 )
-from core.eyes.capture import DisplayMetrics, MemoryFrame, ScreenCapturer
+from core.eyes.capture import DisplayMetrics, ScreenCapturer
 from core.eyes.interaction import EyesInteractionManager
-from core.eyes.planner import ActionType, ConfidenceLevel, EyesTargetResolver
 from core.eyes.proactive import ProactiveAssistanceEngine, ProactiveOpportunity
 from core.eyes.state import ScreenState
-from core.eyes.verifier import EyesStateVerifier, VerificationOutcome
 from core.eyes.vision_ocr import VisionOCR, VisualEntityCard
 from core.logger import get_logger
 
@@ -188,7 +187,7 @@ class NovaEyesManager:
         frame = self.capturer.capture_frame(self._active_display)
         if frame is None:
             return ScreenState(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 active_application="Desktop",
                 active_window="Screen",
                 metrics=self._active_display,
@@ -214,7 +213,7 @@ class NovaEyesManager:
 
         # 5. Synthesize unified ScreenState in RAM
         state = ScreenState.build_from_sources(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             active_app=active_app,
             active_win=active_win,
             metrics=self._active_display,
@@ -326,7 +325,7 @@ class NovaEyesManager:
                 browser_info = self._get_browser_context(active_app)
 
                 state = ScreenState.build_from_sources(
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                     active_app=active_app,
                     active_win=active_win,
                     metrics=self._active_display,

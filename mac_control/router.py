@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import time
-from mac_control.models import MacCommand, ExecutionResult, ExecutionStatus, CommandCategory
-from mac_control.actions.volume import execute_volume_command
-from mac_control.actions.brightness import execute_brightness_command
+
 from mac_control.actions.applications import execute_applications_command
+from mac_control.actions.brightness import execute_brightness_command
 from mac_control.actions.browser import execute_browser_command
-from mac_control.actions.media import execute_media_command
-from mac_control.actions.finder import execute_finder_command
-from mac_control.actions.screenshot import execute_screenshot_command
 from mac_control.actions.clipboard import execute_clipboard_command
+from mac_control.actions.finder import execute_finder_command
+from mac_control.actions.media import execute_media_command
 from mac_control.actions.network import execute_network_command
+from mac_control.actions.screenshot import execute_screenshot_command
 from mac_control.actions.system import execute_system_command
+from mac_control.actions.volume import execute_volume_command
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
+
 
 class CommandRouter:
     """Invokes the appropriate action execution function based on category."""
@@ -53,7 +55,7 @@ class CommandRouter:
                 command_name="Execution Router",
                 category=cmd.category
             )
-            
+
         latency = int((time.perf_counter() - start_time) * 1000)
         result.execution_time_ms = latency
         return result

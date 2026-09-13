@@ -5,12 +5,13 @@ from __future__ import annotations
 import threading
 import time
 import urllib.parse
-from typing import Any, Callable
+from typing import Any
 
 from config.settings import settings
 from core.event_bus import NovaEvent
 from core.logger import get_logger
 from core.registry import registry
+
 from browser.context import BrowserContextManager
 from browser.engine import BaseBrowserEngine
 from browser.models import (

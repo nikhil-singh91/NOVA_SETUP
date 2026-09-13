@@ -11,15 +11,12 @@ import threading
 import time
 from typing import Any
 
-from core.environment import EnvironmentContext, environment_observer
-from core.event_bus import EventBus, NovaEvent
 from core.eyes import (
     ActionType,
     ConfidenceLevel,
     EyesStateVerifier,
     EyesTargetResolver,
     NovaEyesManager,
-    ScreenState,
     SemanticElement,
     UIElementType,
     nova_eyes,
@@ -29,10 +26,7 @@ from core.logger import get_logger
 from core.visual.analysis import ScreenAnalyzer
 from core.visual.interaction import ComputerInteractionManager
 from core.visual.models import (
-    ScreenAnalysis,
-    ScreenSnapshot,
     UIElement,
-    VisualActionPlan,
     VisualActionType,
     VisualConfidence,
     VisualResult,
@@ -40,7 +34,7 @@ from core.visual.models import (
 from core.visual.observer import ScreenObserver, screen_observer
 from core.visual.resolver import UITargetResolver
 from core.visual.verifier import VisualVerifier
-from providers.provider_manager import ProviderManager, TaskType
+from providers.provider_manager import ProviderManager
 
 logger = get_logger(__name__)
 

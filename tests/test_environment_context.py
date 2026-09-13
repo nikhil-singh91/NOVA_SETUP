@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from core.environment import ContextResolver, EnvironmentContext, EnvironmentObserver
+
+from core.environment import ContextResolver, EnvironmentContext
 
 
 def test_environment_context_creation() -> None:

@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from config.settings import settings
 from core.logger import get_logger
+
 from media.collector import YouTubeCandidateCollector
 from media.models import (
     MediaRequest,
-    MediaType,
-    MusicIntent,
-    MusicPreference,
     ShortTermMusicContext,
     VideoCandidate,
 )

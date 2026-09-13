@@ -7,8 +7,8 @@ import time
 from typing import Any
 
 import numpy as np
-
 from core.logger import get_logger
+
 from voice.state import VADState
 
 logger = get_logger(__name__)

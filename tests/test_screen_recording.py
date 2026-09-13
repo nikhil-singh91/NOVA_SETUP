@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
 
+import pytest
 from core.screen_recording import ScreenRecordingManager, ScreenRecordingResult
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent

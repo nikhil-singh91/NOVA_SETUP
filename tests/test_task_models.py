@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from core.task_agent.models import (
     StepStatus,
     TaskContext,
     TaskGoal,
     TaskPlan,
-    TaskStatus,
     TaskStep,
 )
 

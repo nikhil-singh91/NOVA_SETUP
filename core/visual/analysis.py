@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
-import re
 import subprocess
-from typing import Any
 
 from core.logger import get_logger
 from core.visual.models import (
@@ -59,7 +56,7 @@ class ScreenAnalyzer:
         if not app_name:
             return
 
-        script = f"""
+        script = """
         tell application "System Events"
             try
                 set targetProc to first application process whose frontmost is true
@@ -67,7 +64,7 @@ class ScreenAnalyzer:
                     return "NO_WINDOW"
                 end if
                 set frontWin to front window of targetProc
-                set outList to {{}}
+                set outList to {}
                 
                 -- Extract Buttons
                 try

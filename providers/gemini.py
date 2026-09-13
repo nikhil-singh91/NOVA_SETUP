@@ -22,13 +22,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Final
 
-from google import genai
-from google.genai import errors as genai_errors
-from google.genai import types as genai_types
-
 from config.settings import settings
 from core.exceptions import GeminiError
 from core.logger import get_logger
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 from providers.base_provider import BaseProvider
 
 logger = get_logger(__name__)

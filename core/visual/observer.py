@@ -6,11 +6,9 @@ import hashlib
 import os
 import subprocess
 import threading
-import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from core.environment import environment_observer
 from core.logger import get_logger
@@ -45,7 +43,7 @@ class ScreenObserver:
     def capture_current_screen(self, custom_id: str | None = None) -> ScreenSnapshot:
         """Capture an instantaneous, silent full-screen snapshot for the current task."""
         snap_id = custom_id or f"snap_{uuid.uuid4().hex[:10]}"
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         file_path = self.snapshot_dir / f"{snap_id}.png"
 
         # 1. Fetch current environment context for metadata
@@ -103,7 +101,7 @@ class ScreenObserver:
     def capture_active_window(self, custom_id: str | None = None) -> ScreenSnapshot:
         """Capture a snapshot of the frontmost window."""
         snap_id = custom_id or f"win_{uuid.uuid4().hex[:10]}"
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         file_path = self.snapshot_dir / f"{snap_id}.png"
 
         ctx = environment_observer.get_context()
@@ -111,7 +109,7 @@ class ScreenObserver:
 
         # Try window capture (-l flag or fallback to full screen)
         try:
-            res = subprocess.run(
+            subprocess.run(
                 ["screencapture", "-x", "-w", str(file_path)],
                 capture_output=True,
                 text=True,
@@ -148,7 +146,7 @@ class ScreenObserver:
     def capture_region(self, x: int, y: int, width: int, height: int, custom_id: str | None = None) -> ScreenSnapshot:
         """Capture a specific bounding box region of the display."""
         snap_id = custom_id or f"reg_{uuid.uuid4().hex[:10]}"
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         file_path = self.snapshot_dir / f"{snap_id}.png"
 
         ctx = environment_observer.get_context()

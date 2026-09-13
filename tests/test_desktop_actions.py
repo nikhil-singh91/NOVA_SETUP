@@ -2,29 +2,21 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
-import pytest
 
+import pytest
 from desktop.apps import AppLauncher
-from desktop.camera import CameraManager
 from desktop.code import CodeProjectManager
-from desktop.context import DesktopContextManager
 from desktop.editor import DocumentEditor
 from desktop.files import FileSystemManager
 from desktop.manager import DesktopActionManager
 from desktop.models import (
     DesktopActionPlan,
     DesktopActionType,
-    DesktopResult,
-    DesktopStep,
     DesktopTaskPlan,
 )
 from desktop.parser import DesktopIntentParser
-from desktop.planner import DesktopTaskPlanner
 from desktop.safety import DesktopSafetyPolicy
 
 

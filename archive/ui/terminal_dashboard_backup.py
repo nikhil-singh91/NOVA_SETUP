@@ -2,31 +2,26 @@
 
 from __future__ import annotations
 
-import os
-import sys
-import shutil
-import time
-import platform
-import socket
 import getpass
+import shutil
+import socket
+import sys
 import threading
+import time
 from typing import Any
-from collections import deque
 
+from core.event_bus import NovaEvent
+from core.logger import get_logger
+from core.registry import registry
+from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
 from rich.panel import Panel
-from rich.table import Table
 from rich.progress import ProgressBar
+from rich.table import Table
 from rich.text import Text
-from rich.align import Align
-
-from config.settings import settings
-from ui.health_checker import HealthChecker, DashboardStatsManager
+from ui.health_checker import DashboardStatsManager, HealthChecker
 from ui.startup_screen import StartupScreen
-from core.registry import registry
-from core.event_bus import NovaEvent
-from core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -46,7 +41,7 @@ class TerminalDashboard:
             if self._running:
                 return
             self._running = True
-            
+
             # Subscribe to EventBus for real-time reactivity
             try:
                 if registry.exists("event_bus"):
@@ -59,7 +54,7 @@ class TerminalDashboard:
                     bus.subscribe(NovaEvent.COMMAND_EXECUTED, self.handle_event)
             except Exception as e:
                 logger.warning("Failed to subscribe dashboard to event bus: %s", e)
-                
+
             self._updater_thread = threading.Thread(target=self._run_updater, daemon=True, name="nova-dashboard-updater")
             self._updater_thread.start()
 
@@ -87,33 +82,33 @@ class TerminalDashboard:
                     DashboardStatsManager.update("current_task", "Greeting user...")
                 elif new_state == "INITIALIZE":
                     DashboardStatsManager.update("current_task", "Initializing...")
-                    
+
             elif event_name == NovaEvent.THINKING_STARTED.value:
                 DashboardStatsManager.update("current_task", "Thinking...")
-                
+
             elif event_name == NovaEvent.RESPONSE_GENERATED.value:
                 DashboardStatsManager.update("current_task", "Responding...")
-                
+
             elif event_name == NovaEvent.SPEAKING_STARTED.value:
                 DashboardStatsManager.update("current_task", "Speaking...")
-                
+
             elif event_name == NovaEvent.SPEAKING_FINISHED.value:
                 DashboardStatsManager.update("current_task", "Waiting for input")
-                
+
             elif event_name == NovaEvent.COMMAND_EXECUTED.value:
                 cmd_name = payload.get("command", "None")
                 cmd_cat = payload.get("category", "None")
                 cmd_time = payload.get("execution_time_ms", 0)
                 cmd_status = payload.get("status", "SUCCESS")
                 cmd_result = payload.get("result", "Done")
-                
+
                 DashboardStatsManager.update("last_command", cmd_name)
                 DashboardStatsManager.update("command_category", cmd_cat)
                 DashboardStatsManager.update("command_execution_time", f"{cmd_time} ms")
                 DashboardStatsManager.update("command_status", cmd_status)
                 DashboardStatsManager.update("command_result", cmd_result)
                 DashboardStatsManager.update("current_task", f"Command completed: {cmd_name}")
-                
+
             self.draw_dashboard()
         except Exception as e:
             logger.error("Error processing dashboard event: %s", e)
@@ -140,7 +135,7 @@ class TerminalDashboard:
         StartupScreen.show_boot_sequence()
         sys.stdout.write("\033[2J\033[H")
         sys.stdout.flush()
-        
+
         self.checker.run_checks_async()
         self.draw_dashboard()
         self.start()
@@ -150,11 +145,11 @@ class TerminalDashboard:
         try:
             terminal_size = shutil.get_terminal_size((100, 30))
             width = min(110, max(80, terminal_size.columns))
-            
+
             # Gathers system results
             results = self.checker.run_all_checks()
             stats = DashboardStatsManager.get_all()
-            
+
             # Build Layout
             layout = Layout()
             layout.split_column(
@@ -162,23 +157,23 @@ class TerminalDashboard:
                 Layout(name="body"),
                 Layout(name="footer", size=1)
             )
-            
+
             layout["body"].split_row(
                 Layout(name="left_col", ratio=1),
                 Layout(name="center_col", ratio=1),
                 Layout(name="right_col", ratio=1)
             )
-            
+
             layout["left_col"].split_column(
                 Layout(name="voice", ratio=3),
                 Layout(name="memory", ratio=2)
             )
-            
+
             layout["center_col"].split_column(
                 Layout(name="ai_providers", ratio=3),
                 Layout(name="commands", ratio=2)
             )
-            
+
             layout["right_col"].split_column(
                 Layout(name="system", ratio=3),
                 Layout(name="logs_and_errors", ratio=2)
@@ -201,7 +196,7 @@ class TerminalDashboard:
             # 2. Voice Panel (Left)
             voice_spec = results.get("voice", {})
             state_val = stats.get("voice_state", "LISTENING")
-            
+
             # Waveform visual mock representation based on active state
             if state_val == "SPEAKING":
                 wave_txt = "[bold green]▅▅▃▆▃▅▃▆▃▅▃▆▃▅[/bold green]"
@@ -211,11 +206,11 @@ class TerminalDashboard:
                 wave_txt = "[bold yellow] ░░░░░░░░░░░░░ [/bold yellow]"
             else:
                 wave_txt = "[dim]--------------[/dim]"
-                
+
             audio_level = stats.get("audio_level", 12)
             noise_level = stats.get("noise_level", 8)
             audio_bar = ProgressBar(total=100, completed=audio_level, width=15)
-            
+
             # Determine dynamic microphone status
             mic_info = voice_spec.get("Microphone", "Checking...")
             if state_val == "SPEAKING":
@@ -248,7 +243,7 @@ class TerminalDashboard:
             voice_table.add_row("Audio Level:", audio_bar)
             voice_table.add_row("Live Waveform:", wave_txt)
             voice_table.add_row("Last Transcript:", f"[italic green]\"{stats.get('last_transcript', 'None')}\"[/italic green]")
-            
+
             layout["voice"].update(Panel(voice_table, title="Voice Subsystem", border_style="green" if state_val != "ERROR" else "red"))
 
             # 3. Memory Panel (Left Bottom)
@@ -268,7 +263,7 @@ class TerminalDashboard:
             prov_table.add_column("Provider", style="bold")
             prov_table.add_column("Status", justify="center")
             prov_table.add_column("Latency")
-            
+
             for prov, key in [("Gemini", "Gemini"), ("Groq", "Groq"), ("OpenRouter", "OpenRouter"), ("Cerebras", "Cerebras")]:
                 p_data = prov_spec.get(prov, {})
                 status_lbl = p_data.get("status", "Checking...")
@@ -286,7 +281,7 @@ class TerminalDashboard:
             ai_summary_table.add_row("Active Provider:", stats.get("active_provider", "Gemini"))
             ai_summary_table.add_row("Active Model:", stats.get("active_model", "gemini-2.5-flash"))
             ai_summary_table.add_row("Fallback Router:", "[bold green]Active[/bold green]")
-            
+
             ai_layout = Layout()
             ai_layout.split_column(
                 Layout(prov_table, ratio=2),
@@ -317,10 +312,10 @@ class TerminalDashboard:
                 ram_val = float(ram_val_str)
             except ValueError:
                 ram_val = 0.0
-                
+
             cpu_bar = ProgressBar(total=100, completed=cpu_val, width=15)
             ram_bar = ProgressBar(total=100, completed=ram_val, width=15)
-            
+
             sys_table = Table.grid(expand=True)
             sys_table.add_column(style="bold dim", width=16)
             sys_table.add_column(style="bold")
@@ -339,7 +334,7 @@ class TerminalDashboard:
                 Layout(name="errors", size=6),
                 Layout(name="logs")
             )
-            
+
             # Setup Errors info
             if stats.get("errors_count", 0) > 0:
                 err_table = Table.grid(expand=True)
@@ -354,7 +349,7 @@ class TerminalDashboard:
                     Align.center("[bold green]✓ NO SYSTEM ERRORS ACTIVE[/bold green]\nDiagnostics state healthy."),
                     title="🏥 Active System Recovery Alerts", border_style="green"
                 ))
-                
+
             # Setup Logs info
             log_lines = DashboardStatsManager.get_logs()
             log_text = Text()
@@ -368,7 +363,7 @@ class TerminalDashboard:
                 else:
                     prefix = "[bold green][INF][/bold green] "
                 log_text.append_text(Text.from_markup(f"{prefix}{msg}\n"))
-                
+
             logs_errors_layout["logs"].update(Panel(log_text, title="Log Viewer Feed", border_style="dim"))
             layout["logs_and_errors"].update(logs_errors_layout)
 
@@ -384,7 +379,7 @@ class TerminalDashboard:
                 state_display = "👋 Greeting"
             elif state_val == "INITIALIZE":
                 state_display = "⚙️ Initializing"
-                
+
             footer_text = Text(f"State: {state_display} | Target: {stats.get('current_task', 'None')}", style="bold white", justify="center")
             layout["footer"].update(footer_text)
 
@@ -392,7 +387,7 @@ class TerminalDashboard:
             with self.console.capture() as capture:
                 self.console.print(layout)
             canvas_str = capture.get()
-            
+
             # Overwrite console cleanly above prompt
             sys.stdout.write("\033[s") # Save cursor
             sys.stdout.write("\033[H") # Home cursor
@@ -400,6 +395,6 @@ class TerminalDashboard:
                 sys.stdout.write(f"\033[K{line}\n")
             sys.stdout.write("\033[u") # Restore cursor
             sys.stdout.flush()
-            
+
         except Exception as e:
             logger.error("Error drawing terminal dashboard layout: %s", e)

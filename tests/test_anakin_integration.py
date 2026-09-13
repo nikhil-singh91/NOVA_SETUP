@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from core.context import ContextualReferenceResolver, RecentInteractionContext
-from core.task_agent.registry import CapabilityRegistry, capability_registry
+from core.task_agent.registry import capability_registry
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
-from services.anakin_service import AnakinSearchResult, WebSource, anakin_service
 
 
 class TestAnakinNovaIntegration:

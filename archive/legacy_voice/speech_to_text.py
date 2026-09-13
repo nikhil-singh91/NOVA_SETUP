@@ -51,20 +51,22 @@ import re
 import sys
 import threading
 import time
-from config.settings import settings
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Final
+from typing import Any, Final
 
 import numpy as np
 import torch
+from config.settings import settings
+
 
 class HighPassFilter:
     def __init__(self, alpha: float = 0.98) -> None:
         self.alpha = alpha
         self.prev_x = 0.0
-        
+
     def process(self, frame: np.ndarray) -> np.ndarray:
         shifted = np.empty_like(frame)
         shifted[0] = self.prev_x
@@ -78,18 +80,18 @@ class AutomaticGainControl:
         self.target_rms = target_rms
         self.max_gain = max_gain
         self.current_gain = 1.0
-        
+
     def process(self, frame: np.ndarray) -> np.ndarray:
         rms = np.sqrt(np.mean(frame ** 2)) + 1e-6
         is_clipping = np.any(np.abs(frame) > 0.98)
-        
+
         if is_clipping:
             target_gain = 0.5 * self.current_gain
             self.current_gain = 0.7 * self.current_gain + 0.3 * target_gain
         else:
             target_gain = self.target_rms / rms
             self.current_gain = 0.95 * self.current_gain + 0.05 * target_gain
-            
+
         self.current_gain = max(0.2, min(self.max_gain, self.current_gain))
         return frame * self.current_gain
 
@@ -100,12 +102,12 @@ class SpectralNoiseSuppressor:
         self.alpha = 2.0
         self.beta = 0.03
         self.frames_seen = 0
-        
+
     def process(self, frame: np.ndarray) -> np.ndarray:
         spec = np.fft.rfft(frame)
         mag = np.abs(spec)
         phase = np.angle(spec)
-        
+
         if self.noise_profile is None:
             self.noise_profile = mag
         else:
@@ -113,20 +115,20 @@ class SpectralNoiseSuppressor:
                 self.noise_profile = 0.8 * self.noise_profile + 0.2 * mag
             else:
                 self.noise_profile = 0.995 * self.noise_profile + 0.005 * mag
-                
+
         self.frames_seen += 1
-        
+
         subtracted = mag - self.alpha * self.noise_profile
         subtracted = np.maximum(subtracted, self.beta * mag)
-        
+
         clean_spec = subtracted * np.exp(1j * phase)
         clean_frame = np.fft.irfft(clean_spec)
-        
+
         if len(clean_frame) < len(frame):
             clean_frame = np.pad(clean_frame, (0, len(frame) - len(clean_frame)))
         elif len(clean_frame) > len(frame):
             clean_frame = clean_frame[:len(frame)]
-            
+
         return clean_frame
 
 
@@ -136,20 +138,20 @@ class AcousticEchoCanceller:
         self.mu = mu
         self.weights = np.zeros(length)
         self.history = np.zeros(length)
-        
+
     def process(self, mic_frame: np.ndarray, ref_frame: np.ndarray | None = None) -> np.ndarray:
         if ref_frame is None or np.all(ref_frame == 0.0):
             return mic_frame
-            
+
         out = np.zeros_like(mic_frame)
         for i in range(len(mic_frame)):
             self.history[1:] = self.history[:-1]
             self.history[0] = ref_frame[i] if i < len(ref_frame) else 0.0
-            
+
             echo_est = np.dot(self.weights, self.history)
             error = mic_frame[i] - echo_est
             out[i] = error
-            
+
             self.weights += 2 * self.mu * error * self.history
         return out
 
@@ -168,9 +170,9 @@ except ImportError:
     WhisperModel = None
     _FASTER_WHISPER_AVAILABLE = False
 
-from voice.audio_processor import preprocess_audio
 from core.exceptions import SpeechRecognitionError
 from core.logger import get_logger
+from voice.audio_processor import preprocess_audio
 
 logger = get_logger(__name__)
 
@@ -433,7 +435,7 @@ class RecognitionResult:
             language=language,
             duration_seconds=duration_seconds,
             engine_name=engine_name,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             error_message=None,
             overall_confidence=overall_confidence,
         )
@@ -474,7 +476,7 @@ class RecognitionResult:
             language=language,
             duration_seconds=duration_seconds,
             engine_name=engine_name,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             error_message=error_message,
             overall_confidence=overall_confidence,
         )
@@ -483,23 +485,23 @@ class RecognitionResult:
 def _detect_text_language(text: str, whisper_lang: str | None) -> str:
     """Classify the transcribed text as English, Hindi, or Hinglish."""
     text_lower = text.lower()
-    
+
     # Common Hinglish/Hindi words in Latin script
     hinglish_words = {
-        "kholo", "karo", "chaloo", "kaisa", "hai", "aaj", "mujhe", "padhna", "kya", 
-        "kar", "rahe", "ho", "bhi", "aur", "pe", "se", "ko", "par", "ek", "do", "teen", 
-        "kuch", "sath", "saath", "kaam", "karna", "ya", "phir", "uske", "tumne", "mera", 
+        "kholo", "karo", "chaloo", "kaisa", "hai", "aaj", "mujhe", "padhna", "kya",
+        "kar", "rahe", "ho", "bhi", "aur", "pe", "se", "ko", "par", "ek", "do", "teen",
+        "kuch", "sath", "saath", "kaam", "karna", "ya", "phir", "uske", "tumne", "mera",
         "suno", "sun", "raha", "hoon", "tumhara", "tackle", "bata", "sakte", "chahiye",
         "ki", "apne", "apna", "apni", "hume", "hamesha", "yahan", "wahan", "kaise", "kab",
-        "kyun", "kyon", "kuch", "baat", "discuss", "integrate", "karke", "chalega", "na"
+        "kyun", "kyon", "baat", "discuss", "integrate", "karke", "chalega", "na"
     }
-    
+
     has_devanagari = bool(re.search(r"[\u0900-\u097F]", text))
     has_latin = bool(re.search(r"[a-zA-Z]", text))
-    
+
     words = set(re.findall(r"[a-zA-Z]+", text_lower))
     has_hinglish_words = not words.isdisjoint(hinglish_words)
-    
+
     if has_devanagari and has_latin:
         return "Hinglish"
     elif has_devanagari:
@@ -517,7 +519,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
         return levenshtein_similarity(s2, s1)
     if len(s2) == 0:
         return 0.0
-    
+
     previous_row = range(len(s2) + 1)
     for i, c1 in enumerate(s1):
         current_row = [i + 1]
@@ -527,7 +529,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
             substitutions = previous_row[j] + (c1 != c2)
             current_row.append(min(insertions, deletions, substitutions))
         previous_row = current_row
-        
+
     distance = previous_row[-1]
     max_len = max(len(s1), len(s2))
     return (max_len - distance) / max_len
@@ -581,7 +583,7 @@ def load_speech_corrections() -> dict[str, str]:
     if path.exists():
         try:
             import json
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -590,8 +592,9 @@ def load_speech_corrections() -> dict[str, str]:
 
 def save_speech_correction(raw_input: str, corrected_command: str) -> None:
     """Save a corrected speech mapping to memory/speech_corrections.json."""
-    from core.paths import MEMORY_DIR
     import json
+
+    from core.paths import MEMORY_DIR
     path = MEMORY_DIR / "speech_corrections.json"
     corrections = load_speech_corrections()
     corrections[raw_input.lower().strip()] = corrected_command
@@ -608,7 +611,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
     """Fuzzy correct transcription input. Returns (corrected_text, transcript_conf, intent_conf)."""
     original = text
     text_lower = text.lower().strip()
-    
+
     # 1. Check self-learned corrections first
     corrections = load_speech_corrections()
     if text_lower in corrections:
@@ -653,15 +656,15 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
     best_match = None
     best_score = 0.0
     words = text_lower.split()
-    
+
     for cmd in COMMON_COMMANDS:
         cmd_lower = cmd.lower()
         score = levenshtein_similarity(text_lower, cmd_lower)
-        
+
         # Sub-word intersection or containment boosts (only for multi-word inputs)
         if cmd_lower in text_lower or (text_lower in cmd_lower and len(words) >= 2):
             score = max(score, 0.85)
-            
+
         # Semantic mapping aliases
         if "sound" in text_lower or "audio" in text_lower or "volume" in text_lower:
             if any(act in text_lower for act in ["increase", "raise", "up", "loud"]):
@@ -670,7 +673,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
             elif any(act in text_lower for act in ["decrease", "lower", "down", "kam"]):
                 if cmd == "Decrease Volume":
                     score = max(score, 0.90)
-                    
+
         if "brightness" in text_lower:
             if any(act in text_lower for act in ["increase", "raise", "up"]):
                 if cmd == "Increase Brightness":
@@ -682,7 +685,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
         if "download" in text_lower:
             if cmd == "Open Downloads":
                 score = max(score, 0.88)
-                
+
         if "shut down" in text_lower or "turn off" in text_lower:
             if cmd == "Shutdown Mac":
                 score = max(score, 0.90)
@@ -700,7 +703,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
         return best_match, 95.0, best_score * 100.0
     if best_score >= 0.55 and best_match:
         return best_match, 85.0, best_score * 100.0
-        
+
     return original, 95.0, best_score * 100.0
 
 
@@ -790,7 +793,7 @@ class SystemStateManager:
                 return
             cls._current_state = new_state
             logger.info("[SystemState] Atomic transition: %s -> %s", old_state.value, new_state.value)
-            
+
             try:
                 from ui.health_checker import DashboardStatsManager
                 DashboardStatsManager.update("voice_state", new_state.value)
@@ -951,7 +954,7 @@ class MicrophoneStream:
         self.device_index = device_index
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
-        
+
         self._lock = threading.RLock()
         self._pyaudio: pyaudio.PyAudio | None = None
         self._stream: pyaudio.Stream | None = None
@@ -969,7 +972,7 @@ class MicrophoneStream:
             logger.info("[DEBUG] Opening PyAudio instance for fresh session...")
             import pyaudio
             self._pyaudio = pyaudio.PyAudio()
-            
+
             target_index = self.device_index
             if target_index is None:
                 try:
@@ -1003,7 +1006,7 @@ class MicrophoneStream:
         logger.info("[DEBUG] reinitialize() requested.")
         with self._lock:
             self._running = False
-            
+
         if self._thread:
             logger.info("[DEBUG] Joining recording thread in reinitialize...")
             try:
@@ -1011,7 +1014,7 @@ class MicrophoneStream:
             except Exception as e:
                 logger.warning("Error joining thread: %s", e)
             self._thread = None
-            
+
         with self._lock:
             if self._stream:
                 stream_id = id(self._stream)
@@ -1022,7 +1025,7 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error closing stream: %s", e)
                 self._stream = None
-                
+
             if self._pyaudio:
                 try:
                     self._pyaudio.terminate()
@@ -1030,13 +1033,13 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error terminating PyAudio: %s", e)
                 self._pyaudio = None
-                
+
             self._active_owners.clear()
             self._queue = queue.Queue()
-            
+
             import pyaudio
             self._pyaudio = pyaudio.PyAudio()
-            
+
             target_index = self.device_index
             if target_index is None:
                 try:
@@ -1059,7 +1062,7 @@ class MicrophoneStream:
             except Exception as exc:
                 logger.error("Failed to open fresh stream: %s", exc)
                 raise MicrophoneUnavailableError(f"Failed to open fresh stream: {exc}") from exc
-                
+
             self._running = True
             self._thread = threading.Thread(target=self._record_loop, daemon=True, name="nova-mic-recorder")
             self._thread.start()
@@ -1073,7 +1076,7 @@ class MicrophoneStream:
                 except Exception:
                     pass
                 self._stream = None
-                
+
             time.sleep(1.0)
             try:
                 target_index = self.device_index
@@ -1083,7 +1086,7 @@ class MicrophoneStream:
                         target_index = default_device.get('index')
                     except Exception:
                         target_index = None
-                
+
                 import pyaudio
                 self._stream = self._pyaudio.open(
                     format=pyaudio.paInt16,
@@ -1103,10 +1106,10 @@ class MicrophoneStream:
     def _record_loop(self) -> None:
         thread_id = threading.get_ident()
         logger.info("[DEBUG] [Thread-%d] Microphone recording thread started.", thread_id)
-        
+
         frames_logged = False
         consecutive_errors = 0
-        
+
         while True:
             with self._lock:
                 if not self._running:
@@ -1115,46 +1118,46 @@ class MicrophoneStream:
                 if self._stream is None:
                     logger.info("[DEBUG] [Thread-%d] self._stream is None. Exiting loop.", thread_id)
                     break
-                
+
                 import voice.text_to_speech
                 if self._stream.is_stopped() or voice.text_to_speech.is_speaking or SystemStateManager.get_state() == SystemState.SPEAKING:
                     time.sleep(0.02)
                     continue
-                    
+
                 active_stream = self._stream
                 active_pyaudio = self._pyaudio
                 stream_id = id(active_stream)
-                
+
             try:
                 with self._lock:
                     if not self._running or self._stream != active_stream:
                         break
                     data = active_stream.read(self.chunk_size, exception_on_overflow=False)
-                    
+
                 if data:
                     if not frames_logged:
                         logger.info("[DEBUG] [Thread-%d] [Stream-%d] First audio frame read successfully.", thread_id, stream_id)
                         frames_logged = True
-                        
+
                     if self._queue.qsize() > 100:
                         try:
                             self._queue.get_nowait()
                         except queue.Empty:
                             pass
                     self._queue.put(data)
-                    
+
                     try:
                         from ui.health_checker import DashboardStatsManager
                         DashboardStatsManager.update("queue_size", f"{self._queue.qsize()} chunks")
                     except Exception:
                         pass
-                        
+
                     consecutive_errors = 0
             except Exception as exc:
                 consecutive_errors += 1
                 if consecutive_errors == 1:
                     logger.warning("[DEBUG] [Thread-%d] Microphone stream read error: %s", thread_id, exc)
-                
+
                 if consecutive_errors >= 3:
                     success = self._reconnect_stream()
                     if not success:
@@ -1163,7 +1166,7 @@ class MicrophoneStream:
                         consecutive_errors = 0
                 else:
                     time.sleep(0.05)
-                    
+
         logger.info("[DEBUG] [Thread-%d] Microphone recording thread exited cleanly.", thread_id)
 
     def read_chunk(self, timeout: float = 0.1, owner: str = "default") -> bytes | None:
@@ -1171,7 +1174,7 @@ class MicrophoneStream:
         if (voice.text_to_speech.is_speaking or SystemStateManager.get_state() == SystemState.SPEAKING) and owner == "recognizer":
             self.clear_queue()
             return None
-            
+
         try:
             return self._queue.get(timeout=timeout)
         except queue.Empty:
@@ -1195,9 +1198,9 @@ class MicrophoneStream:
             self._active_owners.discard(owner)
             if self._active_owners:
                 return
-                
+
             self._running = False
-            
+
         if self._thread:
             logger.info("[DEBUG] Joining recording thread in stop...")
             try:
@@ -1205,7 +1208,7 @@ class MicrophoneStream:
             except Exception as e:
                 logger.warning("Error joining thread: %s", e)
             self._thread = None
-            
+
         with self._lock:
             if self._stream:
                 stream_id = id(self._stream)
@@ -1216,7 +1219,7 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error closing stream: %s", e)
                 self._stream = None
-                
+
             if self._pyaudio:
                 try:
                     self._pyaudio.terminate()
@@ -1252,7 +1255,7 @@ class MicrophoneStream:
         with self._lock:
             self._active_owners.clear()
             self._running = False
-            
+
         if self._thread:
             logger.info("[DEBUG] Joining recording thread in force_stop...")
             try:
@@ -1260,7 +1263,7 @@ class MicrophoneStream:
             except Exception as e:
                 logger.warning("Error joining thread: %s", e)
             self._thread = None
-            
+
         with self._lock:
             if self._stream:
                 stream_id = id(self._stream)
@@ -1271,7 +1274,7 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error closing stream: %s", e)
                 self._stream = None
-                
+
             if self._pyaudio:
                 try:
                     self._pyaudio.terminate()
@@ -1297,17 +1300,17 @@ class AudioVAD:
         self.threshold = 0.35
         self.is_speech_active = False
         self.speech_ever_detected = False
-        
+
         import sys
         is_unit_test = "test_voice_system" in sys.argv[0] or "pytest" in sys.argv[0]
-        
+
         if is_unit_test:
             self.speech_frames_threshold = 7
             self.silence_frames_threshold = 16
         else:
             self.speech_frames_threshold = 2
             self.silence_frames_threshold = int(1000 / frame_duration_ms)
-            
+
         self.silence_counter = 0
         self.speech_counter = 0
 
@@ -1344,7 +1347,7 @@ class AudioVAD:
 
         import sys
         is_unit_test = "test_voice_system" in sys.argv[0] or "pytest" in sys.argv[0]
-        
+
         # Keep clean_frame raw for neural Silero VAD to prevent phase/magnitude distortion
         clean_frame = frame
 
@@ -1358,24 +1361,24 @@ class AudioVAD:
             if not hasattr(self, "noise_floor"):
                 self.noise_floor = 0.005
                 self.max_energy = 0.05
-                
+
             if rms < self.noise_floor:
                 self.noise_floor = 0.95 * self.noise_floor + 0.05 * rms
             else:
                 self.noise_floor = 0.999 * self.noise_floor + 0.001 * rms
             self.noise_floor = max(0.001, self.noise_floor)
-            
+
             if rms > self.max_energy:
                 self.max_energy = 0.90 * self.max_energy + 0.10 * rms
             else:
                 self.max_energy = 0.999 * self.max_energy + 0.001 * rms
             self.max_energy = max(self.noise_floor * 2.0, self.max_energy)
-            
+
             start_threshold = self.noise_floor + (self.max_energy - self.noise_floor) * 0.15
             start_threshold = max(self.noise_floor + 0.003, start_threshold)
             stop_threshold = self.noise_floor + (self.max_energy - self.noise_floor) * 0.05
             stop_threshold = max(self.noise_floor + 0.001, stop_threshold)
-            
+
             if not self.is_speech_active:
                 if rms > start_threshold:
                     self.speech_counter += 1
@@ -1418,19 +1421,19 @@ class AudioVAD:
             from ui.health_checker import DashboardStatsManager
             noise_floor_est = getattr(self.sns, "noise_profile", None)
             noise_rms = np.sqrt(np.mean(noise_floor_est ** 2)) if noise_floor_est is not None else 0.003
-            
+
             snr = 20 * np.log10(rms_val / (noise_rms + 1e-6))
             snr = max(-10.0, min(50.0, snr))
-            
+
             DashboardStatsManager.update("audio_level", int(min(1.0, rms_val * 6.0) * 100))
             DashboardStatsManager.update("noise_level", int(min(1.0, noise_rms * 6.0) * 100))
             DashboardStatsManager.update("speech_confidence", f"{speech_prob * 100:.0f}%")
             DashboardStatsManager.update("estimated_snr", f"{snr:.1f} dB")
             DashboardStatsManager.update("mic_gain", f"{getattr(self.agc, 'current_gain', 1.0):.2f}x")
-            
+
             DashboardStatsManager.update("rms", f"{rms_val:.4f}")
             DashboardStatsManager.update("noise_floor", f"{noise_rms:.4f}")
-            
+
             qual_info = self.get_quality_score()
             DashboardStatsManager.update("current_audio_state", qual_info["reason"])
         except Exception:
@@ -1468,7 +1471,7 @@ class AudioVAD:
     def get_quality_score(self) -> dict[str, Any]:
         """Expose quality parameters for diagnostic logging and GUI dashboards."""
         avg_prob = sum(self.last_probs) / len(self.last_probs) if self.last_probs else 0.0
-        
+
         reason = "Clean Signal"
         if not self.is_speech_active and not self.speech_ever_detected:
             reason = "No Speech Detected"
@@ -1476,7 +1479,7 @@ class AudioVAD:
             reason = "Clipping Distortion"
         elif avg_prob < 0.20 and not self.speech_ever_detected:
             reason = "Low Volume Speech"
-            
+
         return {
             "confidence": avg_prob * 100,
             "reason": reason,
@@ -1505,7 +1508,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         self._mic_stream: MicrophoneStream | None = None
         self._live_transcribe_thread: threading.Thread | None = None
         self._model_loaded_event = threading.Event()
-        
+
         self._initial_prompt_str = (
             "Nikhil, Boss, NOVA, listen, VS Code kholo, system volume increase karo, browser open karo. "
             "Mummy Ji, Papa, are you listening? Please load my active project. Chalao, band karo, "
@@ -1526,12 +1529,12 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             raise EngineUnavailableError("The 'faster-whisper' package is required.")
         if not _PYAUDIO_AVAILABLE:
             raise EngineUnavailableError("The 'pyaudio' package is required.")
-            
+
         self._mic_stream = MicrophoneStream(
             device_index=self._config.device_index,
             sample_rate=self._config.sample_rate or 16000
         )
-        
+
         # Determine mic name
         self._mic_name = "Default Microphone"
         import pyaudio as pa_module
@@ -1566,7 +1569,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     DashboardStatsManager.update("whisper_memory", f"{WhisperRecognizer._static_memory_mb:.1f} MB" if WhisperRecognizer._static_memory_mb > 0 else "N/A")
                 except Exception:
                     pass
-                
+
                 # Start watchdog loop
                 self._watchdog_running = True
                 self._watchdog_thread = threading.Thread(
@@ -1622,12 +1625,12 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         {"device": "mps", "compute_type": "float16", "label": "Metal"},
                         {"device": "cpu", "compute_type": "int8", "label": "CPU"}
                     ]
-                    
+
                     import os
                     model_name = os.environ.get("WHISPER_MODEL_NAME") or self._config.model_name or "large-v3"
                     if model_name == "tiny" and (self._config.model_name != "tiny" and os.environ.get("WHISPER_MODEL_NAME") != "tiny"):
                         model_name = "large-v3"
-                        
+
                     model_order = [model_name, model_name, "medium", "small"]
                     loaded_model = None
                     used_model_name = None
@@ -1636,7 +1639,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
 
                     for attempt, target_model in enumerate(model_order):
                         logger.info("Attempting to load Whisper model '%s' (Attempt %d)...", target_model, attempt + 1)
-                        
+
                         # Check if model exists locally
                         model_exists = False
                         try:
@@ -1645,7 +1648,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                             model_exists = True
                         except Exception:
                             pass
-                            
+
                         if not model_exists:
                             print(f"📥 Downloading speech model '{target_model}' for first use...")
                             print("   (This downloads from HuggingFace. Please wait...)")
@@ -1669,7 +1672,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                             except Exception as e:
                                 logger.warning("Config device=%s, compute_type=%s failed for %s: %s", cfg["device"], cfg["compute_type"], target_model, e)
                                 continue
-                        
+
                         if loaded_model is not None:
                             break
 
@@ -1681,17 +1684,17 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     else:
                         logger.error("Failed to load any Whisper model fallback.")
                         return
-                
+
                 self._model = WhisperRecognizer._static_model
-                
+
             # Perform automatic self test
             self._run_self_test()
-            
+
             # Set model loaded event and mark initialized
             self._model_loaded_event.set()
             with self._lock:
                 self._initialized = True
-                
+
             # Update DashboardStatsManager
             try:
                 from ui.health_checker import DashboardStatsManager
@@ -1703,7 +1706,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 DashboardStatsManager.update("whisper_state", "IDLE")
             except Exception:
                 pass
-                
+
             print("\n✓ Speech engine initialized in background")
             print(f"✓ Model: {WhisperRecognizer._static_model_name}")
             print(f"✓ Device: {WhisperRecognizer._static_device}")
@@ -1718,14 +1721,14 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         """Run speech recognition system self-checks."""
         print("\n=== STARTING WHISPER ENGINE SELF-TEST ===")
         sys.stdout.flush()
-        
+
         # 1. Model Loaded Check
         if self._model is not None:
             print("✓ Model Loaded")
         else:
             print("❌ Model Loaded failed")
             return
-            
+
         # 2 & 3. Inference Working & Decoder Healthy Check
         try:
             dummy_pcm = np.zeros(16000, dtype=np.float32)
@@ -1743,10 +1746,11 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             print("✓ Decoder Healthy")
         except Exception as e:
             print(f"❌ Inference/Decoder Healthy failed: {e}")
-            
+
         # 4. Memory Stable Check
         try:
             import os
+
             import psutil
             process = psutil.Process(os.getpid())
             mem_mb = process.memory_info().rss / 1024 / 1024
@@ -1755,7 +1759,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         except Exception:
             WhisperRecognizer._static_memory_mb = 3100.0
             print("✓ Memory Stable (approx)")
-            
+
         # 5. Thread Lock Working Check
         lock_acquired = self._lock.acquire(blocking=False)
         if lock_acquired:
@@ -1763,7 +1767,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             print("✓ Thread Lock Working")
         else:
             print("❌ Thread Lock Working failed")
-            
+
         print("=== WHISPER ENGINE SELF-TEST PASSED ===\n")
         sys.stdout.flush()
 
@@ -1775,11 +1779,11 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             except Exception:
                 pass
             self._watchdog_thread = None
-            
+
         with WhisperRecognizer._static_model_lock:
             WhisperRecognizer._static_model = None
             self._model = None
-            
+
         if self._mic_stream:
             self._mic_stream.force_stop()
             self._mic_stream = None
@@ -1791,11 +1795,11 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             time.sleep(2.0)
             if not self._mic_stream:
                 continue
-                
+
             mic = self._mic_stream
             thread_alive = mic._thread is not None and mic._thread.is_alive()
             mic_running = mic._running
-            
+
             if mic_running and not thread_alive:
                 logger.warning("Watchdog detected dead recording thread. Restarting recorder...")
                 recovery_count += 1
@@ -1805,7 +1809,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     logger.info("Watchdog recovered microphone thread successfully.")
                 except Exception as e:
                     logger.error("Watchdog failed to recover microphone thread: %s", e)
-            
+
             try:
                 from ui.health_checker import DashboardStatsManager
                 mic_state = "STANDBY"
@@ -1814,7 +1818,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         mic_state = "MUTED" if mic._stream.is_stopped() else "ON"
                     except Exception:
                         pass
-                
+
                 DashboardStatsManager.update("mic_state", mic_state)
                 DashboardStatsManager.update("recorder_state", "RUNNING" if thread_alive else "STOPPED")
                 DashboardStatsManager.update("thread_health", "HEALTHY" if (thread_alive and mic_running) else "DEGRADED")
@@ -1825,7 +1829,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
     def _do_listen_once(self) -> RecognitionResult:
         if not self._mic_stream:
             raise SpeechRecognitionError("Recognizer is not initialized.")
-            
+
         # Wait for the background model loading to finish
         if not self._model_loaded_event.is_set():
             logger.info("[%s] Waiting for Whisper model loading task to complete...", self.engine_name)
@@ -1837,43 +1841,43 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         import voice.text_to_speech
         while voice.text_to_speech.is_speaking or SystemStateManager.get_state() == SystemState.SPEAKING:
             time.sleep(0.05)
-            
+
         # 2. Wait safety delay
         time.sleep(0.5)
-        
+
         # 3. Destroy old stream and initialize fresh mic session before recording
         try:
             self._mic_stream.reinitialize()
         except Exception as e:
             logger.warning("Mic reinitialization failed, proceeding: %s", e)
-            
+
         self._mic_stream.clear_queue()
         self._mic_stream.resume_recording()
-        
+
         self._mic_stream.start("recognizer")
         self._mic_stream.clear_queue()
-        
+
         SystemStateManager.transition_to(SystemState.LISTENING)
-        
+
         start_time = time.monotonic()
-            
+
         try:
             vad = AudioVAD(sample_rate=16000, frame_duration_ms=30)
             audio_buffer = bytearray()
-            
+
             timeout = self._config.timeout_seconds or 5.0
             phrase_limit = self._config.phrase_time_limit_seconds or 15.0
-            
+
             speech_started = False
             last_live_update = 0.0
-            
+
             if self._is_interactive:
                 print("====================================================")
                 print("🎤 NOVA LISTENING...")
                 print("Speak now...")
                 print("====================================================")
                 sys.stdout.flush()
-                
+
             while True:
                 elapsed = time.monotonic() - start_time
                 if not speech_started and elapsed > timeout:
@@ -1889,23 +1893,23 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         engine_name=self.engine_name,
                         error_message="No speech detected within timeout."
                     )
-                    
+
                 if speech_started and elapsed > phrase_limit:
                     break
-                    
+
                 chunk = self._mic_stream.read_chunk(timeout=0.05, owner="recognizer")
                 if not chunk:
                     time.sleep(0.01)
                     continue
-                    
+
                 audio_buffer.extend(chunk)
-                
+
                 frame_int16 = np.frombuffer(chunk, dtype=np.int16)
                 frame_float32 = frame_int16.astype(np.float32) / 32768.0
-                
+
                 rms = np.sqrt(np.mean(frame_float32 ** 2))
                 is_speech = vad.process_frame(frame_float32)
-                
+
                 if self._is_interactive:
                     mic_status = "YES" if speech_started else "NO"
                     sil_time = (vad.silence_counter * 30 / 1000) if speech_started else 0.0
@@ -1914,25 +1918,25 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         f"Rec Time: {elapsed:.1f}s | Silence Timer: {sil_time:.2f}s]"
                     )
                     sys.stdout.flush()
-                
+
                 if is_speech and not speech_started:
                     speech_started = True
                     pre_speech_bytes = b"".join(vad.history_buffer)
                     audio_buffer = bytearray(pre_speech_bytes) + audio_buffer
-                    
+
                     if self._is_interactive:
                         sys.stdout.write("\n👤 YOU: \n")
                         sys.stdout.flush()
-                        
+
                 if speech_started:
                     now = time.monotonic()
                     if now - last_live_update > 0.35:
                         last_live_update = now
                         self._run_live_transcribe(bytes(audio_buffer))
-                        
+
                 if speech_started and not is_speech:
                     break
-                    
+
             if self._is_interactive:
                 sys.stdout.write("\n")
                 sys.stdout.flush()
@@ -1944,11 +1948,11 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             self._mic_stream.force_stop()
 
         SystemStateManager.transition_to(SystemState.PROCESSING)
-        
+
         print("🎤 Transcribing...")
         sys.stdout.flush()
         logger.info("[DEBUG] [Thread-%d] Transcription started.", threading.get_ident())
-        
+
         try:
             from ui.health_checker import DashboardStatsManager
             DashboardStatsManager.update("whisper_state", "TRANSCRIBING")
@@ -1989,7 +1993,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 engine_name=self.engine_name,
                 error_message="Silence (No audio captured)."
             )
-            
+
         try:
             def get_transcription_confidence(segs) -> float:
                 total_prob = 0.0
@@ -2024,11 +2028,11 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 if seg.no_speech_prob > 0.6 or seg.avg_logprob < -1.0 or seg.compression_ratio > 2.4:
                     continue
                 valid_segments.append(seg)
-                
+
             text = " ".join(seg.text for seg in valid_segments).strip()
             confidence = get_transcription_confidence(valid_segments) if valid_segments else 0.0
             confidence_percentage = int(confidence * 100)
-            
+
             if not text:
                 SystemStateManager.transition_to(SystemState.IDLE)
                 try:
@@ -2044,7 +2048,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     engine_name=self.engine_name,
                     error_message="Speech not transcribed."
                 )
-                
+
             clean_text = re.sub(r'[^\w\s]', '', text).strip()
             if not clean_text:
                 SystemStateManager.transition_to(SystemState.IDLE)
@@ -2061,7 +2065,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     engine_name=self.engine_name,
                     error_message="Speech consisted only of punctuation."
                 )
-                
+
             words = text.split()
             if len(words) > 4:
                 unique_words = set(words)
@@ -2080,18 +2084,19 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         engine_name=self.engine_name,
                         error_message="Repeated word sequence detected."
                     )
-            
+
             speech_conf = sum(vad.last_probs) / len(vad.last_probs) if vad.last_probs else 0.85
             language_conf = info.language_probability
-            
+
             corrected_text, trans_conf, intent_conf = correct_transcription_intent(text)
-            
+
             overall_conf = (speech_conf * 100 + confidence_percentage + language_conf * 100 + intent_conf) / 4.0
 
             # Compute memory used
             mem_mb_str = "N/A"
             try:
                 import os
+
                 import psutil
                 process = psutil.Process(os.getpid())
                 mem_mb = process.memory_info().rss / 1024 / 1024
@@ -2111,7 +2116,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 DashboardStatsManager.update("rejection_reason", "None")
                 DashboardStatsManager.update("whisper_state", "IDLE")
                 DashboardStatsManager.update("last_command", corrected_text)
-                
+
                 # Debug panel fields update
                 DashboardStatsManager.update("whisper_model", WhisperRecognizer._static_model_name)
                 DashboardStatsManager.update("whisper_device", WhisperRecognizer._static_device)
@@ -2120,16 +2125,16 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 DashboardStatsManager.update("inference_time", f"{inference_duration:.3f}s")
             except Exception:
                 pass
-                
+
             if self._is_interactive:
                 sys.stdout.write("\r\033[K====================================================\n")
                 sys.stdout.write(f"👤 YOU\n{text}\n")
                 sys.stdout.write("====================================================\n\n")
                 sys.stdout.flush()
-                
+
             logger.info("[DEBUG] [Thread-%d] Transcription finished.", threading.get_ident())
             SystemStateManager.transition_to(SystemState.IDLE)
-            
+
             return RecognitionResult.success_result(
                 text=corrected_text,
                 confidence=confidence,
@@ -2138,20 +2143,20 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 engine_name=self.engine_name,
                 overall_confidence=overall_conf
             )
-            
+
         except Exception as exc:
             err_msg = str(exc)
             logger.error("Transcription execution failed: %s", exc, exc_info=True)
             print(f"❌ FAILURE: Transcription error: {exc}")
             sys.stdout.flush()
-            
+
             try:
                 from ui.health_checker import DashboardStatsManager
                 DashboardStatsManager.update("last_exception", err_msg)
                 DashboardStatsManager.update("whisper_state", "IDLE")
             except Exception:
                 pass
-                
+
             SystemStateManager.transition_to(SystemState.IDLE)
             return RecognitionResult.failure_result(
                 status=RecognitionStatus.ERROR,
@@ -2165,7 +2170,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
     def _run_live_transcribe(self, audio_data: bytes) -> None:
         if self._live_transcribe_thread and self._live_transcribe_thread.is_alive():
             return
-            
+
         def _job():
             try:
                 enhanced = preprocess_audio(audio_data, sample_rate=16000)
@@ -2191,7 +2196,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         pass
             except Exception:
                 pass
-                
+
         self._live_transcribe_thread = threading.Thread(target=_job, daemon=True, name="nova-live-transcriber")
         self._live_transcribe_thread.start()
 

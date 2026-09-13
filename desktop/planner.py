@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
 from core.event_bus import NovaEvent
 from core.logger import get_logger
 from core.registry import registry
+
 from desktop.apps import AppLauncher
 from desktop.files import FileSystemManager
 from desktop.models import (
     DesktopActionType,
     DesktopResult,
-    DesktopStep,
     DesktopStepStatus,
     DesktopTaskPlan,
 )
-from desktop.safety import DesktopSafetyPolicy
 
 logger = get_logger(__name__)
 

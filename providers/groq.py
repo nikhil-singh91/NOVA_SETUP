@@ -21,9 +21,10 @@ in this module; it is obtained exclusively through
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Final
+from typing import Any, Final
 
 from groq import APIConnectionError, APIStatusError, Groq, RateLimitError
+from groq.types.chat import ChatCompletionMessageParam
 
 from config.settings import settings
 from core.exceptions import GroqError
@@ -326,9 +327,12 @@ class GroqProvider(BaseProvider):
         if self._client is None:
             raise GroqError("Groq provider is not initialized: API key missing or unconfigured.")
 
+        health_messages: list[ChatCompletionMessageParam] = [
+            {"role": "user", "content": _HEALTH_CHECK_PROMPT}
+        ]
         self._client.chat.completions.create(
             model=self._model,
-            messages=[{"role": _ROLE_USER, "content": _HEALTH_CHECK_PROMPT}],
+            messages=health_messages,
             max_completion_tokens=1,
             stream=False,
         )
@@ -353,7 +357,7 @@ class GroqProvider(BaseProvider):
 
     def _build_messages(
         self, prompt: str, system_prompt: str | None
-    ) -> list[dict[str, str]]:
+    ) -> list[ChatCompletionMessageParam]:
         """Build the chat message list for a Groq chat completions request.
 
         Args:
@@ -364,10 +368,10 @@ class GroqProvider(BaseProvider):
             A list of chat messages in the Groq/OpenAI-compatible
             message format.
         """
-        messages: list[dict[str, str]] = []
+        messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
-            messages.append({"role": _ROLE_SYSTEM, "content": system_prompt})
-        messages.append({"role": _ROLE_USER, "content": prompt})
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         return messages
 
 

@@ -13,27 +13,28 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
-from pathlib import Path
-
-from config.settings import settings
+from browser import BrowserManager
 from core.computer_agent import ComputerAgent, computer_agent
 from core.context import recent_interaction_context
-from core.environment import ContextResolver, EnvironmentObserver, environment_observer, log_environment_debug
-from core.event_bus import EventBus, EventHandler, NovaEvent
-from core.exceptions import MemorySystemError as NovaMemoryError
+from core.environment import (
+    ContextResolver,
+    EnvironmentContext,
+    EnvironmentObserver,
+    environment_observer,
+)
+from core.event_bus import EventBus, NovaEvent
 from core.lifecycle import lifecycle
 from core.logger import get_logger, setup_logging
 from core.screen_recording import ScreenRecordingManager, screen_recording_manager
-from core.screenshot import ScreenshotService, screenshot_service
+from core.screenshot import screenshot_service
 from core.task_agent import TaskContext, TaskExecutor, TaskPlanner, task_executor
-from browser import BrowserManager
-from services.anakin_service import AnakinService, WebSource, anakin_service
 from desktop.manager import DesktopActionManager
 from intent.engine import NaturalLanguageIntentEngine
-from intent.models import CanonicalIntent
+from intent.models import CanonicalIntent, StructuredAction
 from intent.router import RoutingDomain, get_routing_domain
 from mac_control import MacControlManager
 from memory.memory_manager import MemoryCategory, MemoryManager
@@ -45,10 +46,10 @@ from personality.system_prompt import (
     ProfileNotFoundError,
     PromptBuildContext,
     PromptProfile,
-    SystemPromptError,
     SystemPromptManager,
 )
 from providers.provider_manager import AllProvidersFailedError, ProviderManager, TaskType
+from services.anakin_service import AnakinService, WebSource, anakin_service
 from ui.health_checker import DashboardStatsManager
 from voice import QualityDecision, TranscriptionResult, VoiceManager, VoiceState
 from voice.commands import CommandRecognizer, VoiceCommandRouter
@@ -83,7 +84,7 @@ class ActivityState:
 
     current_project: str | None = None
     current_task: str | None = None
-    session_start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    session_start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_conversation_topic: str | None = None
 
 
@@ -131,6 +132,7 @@ class NovaApplication:
         # Voice V2 Subsystem
         self.voice_manager: VoiceManager = VoiceManager()
         self.voice_available: bool = False
+        self._last_voice_transcription: TranscriptionResult | None = None
 
         # Turn Queue & Synchronization
         self._turn_queue: queue.Queue[TurnRequest] = queue.Queue()
@@ -612,37 +614,31 @@ class NovaApplication:
     # Turn Execution Pipeline
     # -------------------------------------------------------------------
 
-    def _process_turn(self, request: TurnRequest) -> None:
-        """Run one complete interaction turn."""
-        turn_id = uuid.uuid4().hex[:8]
-        user_text = request.text.strip()
+    def _handle_isolated_audio_event(self, request: TurnRequest, turn_id: str) -> None:
+        """Handle non-verbal acoustic events like coughing, sneezing, laughing."""
+        self._last_turn_input = f"[{request.audio_event}]"
+        self._current_turn_source = request.source
+        self._current_turn_id = turn_id
+        DashboardStatsManager.start_interaction(
+            f"[{request.audio_event}]", source=request.source, interaction_id=f"turn_{turn_id}"
+        )
+        DashboardStatsManager.record_heard(f"[{request.audio_event}]")
+        DashboardStatsManager.record_understood("Acoustic Audio Event")
+        if request.audio_event in ("cough", "throat_clear"):
+            care_reply = "Boss, you okay? That sounded like a pretty bad cough."
+        elif request.audio_event == "sneeze":
+            care_reply = "Bless you! You okay?"
+        elif request.audio_event == "laughter":
+            care_reply = "Haha, what's making you laugh?"
+        elif request.audio_event == "sigh":
+            care_reply = "Heavy sigh... everything alright?"
+        else:
+            care_reply = "You okay?"
+        self._deliver_response(care_reply, turn_id)
+        DashboardStatsManager.record_result("Event acknowledged", success=True)
 
-        if request.is_isolated_audio_event:
-            self._last_turn_input = f"[{request.audio_event}]"
-            self._current_turn_source = request.source
-            self._current_turn_id = turn_id
-            DashboardStatsManager.start_interaction(
-                f"[{request.audio_event}]", source=request.source, interaction_id=f"turn_{turn_id}"
-            )
-            DashboardStatsManager.record_heard(f"[{request.audio_event}]")
-            DashboardStatsManager.record_understood("Acoustic Audio Event")
-            if request.audio_event in ("cough", "throat_clear"):
-                care_reply = "Boss, you okay? That sounded like a pretty bad cough."
-            elif request.audio_event == "sneeze":
-                care_reply = "Bless you! You okay?"
-            elif request.audio_event == "laughter":
-                care_reply = "Haha, what's making you laugh?"
-            elif request.audio_event == "sigh":
-                care_reply = "Heavy sigh... everything alright?"
-            else:
-                care_reply = "You okay?"
-            self._deliver_response(care_reply, turn_id)
-            DashboardStatsManager.record_result("Event acknowledged", success=True)
-            return
-
-        if not user_text:
-            return
-
+    def _prepare_turn_state(self, request: TurnRequest, user_text: str, turn_id: str) -> None:
+        """Prepare Dashboard and tracking state for turn execution."""
         self._last_turn_input = user_text
         self._current_turn_source = request.source
         self._current_turn_id = turn_id
@@ -654,7 +650,6 @@ class NovaApplication:
 
         logger.info("[turn-%s] Started (source=%s): '%s'", turn_id, request.source, user_text)
 
-        # Start structured activity feed block
         DashboardStatsManager.start_interaction(
             user_text, source=request.source, interaction_id=f"turn_{turn_id}"
         )
@@ -664,48 +659,1053 @@ class NovaApplication:
         self.task_executor.reset_cancellation()
         self.computer_agent.reset_cancellation()
 
+    def _handle_pending_confirmation(self, ctx: EnvironmentContext, user_text: str, turn_id: str) -> bool:
+        """Handle pending confirmation state (e.g. Delete, Reminder, Shutdown)."""
+        if not ctx.pending_confirmation:
+            return False
+
+        pending = ctx.pending_confirmation
+        ctx.pending_confirmation = None  # Clear state
+        norm_lower = user_text.lower().strip()
+
+        if norm_lower in ("yes", "ha", "haan", "sure", "do it", "confirm", "proceed", "yes please", "theek hai"):
+            action_type = pending.get("action")
+            if action_type == "SHUTDOWN_REQUEST":
+                DashboardStatsManager.record_understood("System Shutdown")
+                DashboardStatsManager.record_action("Shutting down NOVA")
+                self._deliver_response("Shutting down now. Goodbye Boss.", turn_id)
+                DashboardStatsManager.record_result("Shutdown initiated", success=True)
+                self._execute_local_shutdown()
+                return True
+            elif action_type == "DELETE_ITEM":
+                target_p = pending.get("target_path")
+                if target_p and Path(target_p).exists():
+                    DashboardStatsManager.record_understood("Delete Item", details={"Target": Path(target_p).name})
+                    DashboardStatsManager.record_action(f"Deleting {Path(target_p).name}")
+                    from desktop.files import FileSystemManager
+                    success, msg = FileSystemManager.safe_move_to_trash(Path(target_p))
+                    reply = f"Deleted {Path(target_p).name}." if success else f"Could not delete: {msg}"
+                    self._deliver_response(reply, turn_id)
+                    DashboardStatsManager.record_result(f"✓ Deleted {Path(target_p).name}" if success else f"✗ Delete failed: {msg}", success=success)
+                    return True
+            elif action_type == "REMINDER_REQUEST":
+                time_str = pending.get("time_str", "")
+                DashboardStatsManager.record_understood("Reminder Confirmed", details={"Time": time_str})
+                reply = f"Understood Boss. I've noted down your reminder for {time_str}."
+                self._deliver_response(reply, turn_id)
+                DashboardStatsManager.record_result(f"✓ Reminder set for {time_str}", success=True)
+                return True
+        elif norm_lower in ("no", "nah", "nahi", "cancel", "don't do it", "mat karo", "abort", "nevermind"):
+            DashboardStatsManager.record_understood("Action Cancelled")
+            self._deliver_response("Action cancelled, Boss.", turn_id)
+            DashboardStatsManager.record_result("Action cancelled by user", success=True)
+            return True
+
+        return False
+
+    def _classify_turn_intent(
+        self, request: TurnRequest, user_text: str
+    ) -> tuple[StructuredAction, RoutingDomain, str]:
+        """Classify user intent with N-best hypotheses and contextual reference resolution."""
+        candidates: list[str] = []
+        if hasattr(request, "transcription") and request.transcription:
+            candidates = list(getattr(request.transcription, "alternatives", []) or [])
+        if request.raw_transcript and request.raw_transcript not in candidates:
+            candidates.insert(0, request.raw_transcript)
+        if user_text not in candidates:
+            candidates.insert(0, user_text)
+
+        eyes_state = None
+        if hasattr(self, "computer_agent") and hasattr(self.computer_agent, "eyes"):
+            try:
+                eyes_state = self.computer_agent.eyes.get_latest_state()
+            except Exception:
+                eyes_state = None
+
+        structured_action = self.intent_engine.parse(
+            user_text,
+            allow_ai_fallback=False,
+            candidates=candidates,
+            context=self.recent_context,
+            screen_state=eyes_state,
+        )
+        norm_text = structured_action.normalized_input or user_text
+        routing_domain = get_routing_domain(structured_action.intent)
+
+        if "reference" in structured_action.parameters or "target" in structured_action.parameters:
+            ref_label = structured_action.parameters.get("reference") or structured_action.parameters.get("target")
+            resolved = self.recent_context.resolve_reference(str(ref_label))
+            if resolved:
+                DashboardStatsManager.record_resolve(
+                    target=f"{resolved.app_name or 'Current Browser'} tab: {resolved.title or resolved.url or 'Active'}",
+                    details={"entity_type": resolved.entity_type, "confidence": resolved.confidence},
+                )
+
+        return structured_action, routing_domain, norm_text
+
+    def _handle_system_intents(self, structured_action: StructuredAction, user_text: str, turn_id: str) -> bool:
+        """Handle cancellation, screen recording, and screenshot capture intents."""
+        if structured_action.intent == CanonicalIntent.CANCEL_ACTION:
+            DashboardStatsManager.record_understood("Cancel Action")
+            DashboardStatsManager.record_action("Stopping active tasks")
+            self.task_executor.cancel_task()
+            self.computer_agent.stop_active_task()
+            self.desktop_manager.stop_active_task()
+            if hasattr(self.browser_manager, "stop_active_task"):
+                self.browser_manager.stop_active_task()
+            elif hasattr(self.browser_manager, "cancel_active_task"):
+                self.browser_manager.cancel_active_task()
+            self._deliver_response("Stopped active tasks, Boss.", turn_id)
+            DashboardStatsManager.record_result("✓ Active tasks stopped", success=True)
+            return True
+
+        if structured_action.intent == CanonicalIntent.START_SCREEN_RECORDING:
+            logger.info("Detected START_SCREEN_RECORDING intent: '%s'", user_text)
+            DashboardStatsManager.record_understood("Start Screen Recording")
+            DashboardStatsManager.record_action("Starting screen recording")
+            start_t = time.monotonic()
+            res = self.screen_recording_manager.start_recording()
+            lat_ms = (time.monotonic() - start_t) * 1000
+            self._deliver_response(res.spoken_response, turn_id)
+            DashboardStatsManager.record_result("● Screen recording started" if res.success else f"✗ Failed: {res.error}", success=res.success)
+            DashboardStatsManager.record_mac_action(
+                command_text=user_text,
+                intent="system.screen_recording.start",
+                target="Screen",
+                status="RECORDING" if res.success else "FAILED",
+                latency_ms=lat_ms,
+                result_message=res.spoken_response,
+            )
+            return True
+
+        if structured_action.intent == CanonicalIntent.STOP_SCREEN_RECORDING:
+            logger.info("Detected STOP_SCREEN_RECORDING intent: '%s'", user_text)
+            DashboardStatsManager.record_understood("Stop Screen Recording")
+            DashboardStatsManager.record_action("Stopping screen recording")
+            start_t = time.monotonic()
+            res = self.screen_recording_manager.stop_recording()
+            lat_ms = (time.monotonic() - start_t) * 1000
+            self._deliver_response(res.spoken_response, turn_id)
+            DashboardStatsManager.record_result("✓ Screen recording stopped" if res.success else f"✗ Failed: {res.error}", success=res.success)
+            DashboardStatsManager.record_mac_action(
+                command_text=user_text,
+                intent="system.screen_recording.stop",
+                target="Screen",
+                status="STOPPED" if res.success else "FAILED",
+                latency_ms=lat_ms,
+                result_message=res.spoken_response,
+            )
+            return True
+
+        if structured_action.intent == CanonicalIntent.SCREEN_CAPTURE:
+            logger.info("Detected screenshot intent: '%s'", user_text)
+            DashboardStatsManager.record_understood("Screenshot")
+            DashboardStatsManager.record_action("Capturing screen")
+            start_t = time.monotonic()
+            res = screenshot_service.capture_full_screen()
+            lat_ms = (time.monotonic() - start_t) * 1000
+            if res.success:
+                spoken = "Screenshot captured successfully and saved to your Desktop."
+                target_file = getattr(res, "file_path", None) or getattr(res, "saved_path", None)
+                saved_info = f"\nSaved to: {target_file}" if target_file else ""
+                DashboardStatsManager.record_verify(f"Screenshot saved to Desktop: {target_file}", success=True)
+                DashboardStatsManager.record_result(f"✓ Screenshot captured{saved_info}", success=True)
+            else:
+                spoken = f"Sorry Boss, I couldn't take a screenshot: {res.error}"
+                DashboardStatsManager.record_verify(f"Screenshot failed: {res.error}", success=False)
+                DashboardStatsManager.record_result(f"✗ Screenshot failed: {res.error}", success=False)
+            DashboardStatsManager.record_mac_action(
+                command_text=user_text,
+                intent="system.screenshot.capture",
+                target="Screen",
+                status="SUCCESS" if res.success else "FAILED",
+                latency_ms=lat_ms,
+                result_message=spoken,
+            )
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        return False
+
+    def _handle_visual_intents(
+        self,
+        structured_action: StructuredAction,
+        routing_domain: RoutingDomain,
+        user_text: str,
+        turn_id: str,
+        ctx: EnvironmentContext,
+    ) -> bool:
+        """Handle visual understanding and NOVA Eyes computer interaction."""
+        if routing_domain != RoutingDomain.VISUAL:
+            return False
+
+        self.computer_agent.provider_mgr = self.provider_manager
+
+        if structured_action.intent == CanonicalIntent.CLOSE_POPUP:
+            res = self.computer_agent.close_popup()
+            self._deliver_response(res.spoken_response, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.EXPLAIN_SCREEN_ERROR:
+            res = self.computer_agent.explain_active_screen_error()
+            self._deliver_response(res.spoken_response, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.SCROLL_UNTIL_VISIBLE:
+            tgt_text = structured_action.parameters.get("target_text", "")
+            res = self.computer_agent.scroll_until_visible(tgt_text)
+            self._deliver_response(res.spoken_response, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.TYPE_UI_TEXT:
+            text_val = structured_action.parameters.get("text", "")
+            tgt_lbl = structured_action.parameters.get("target_label")
+            res = self.computer_agent.type_into_focused_or_target(text_val, target_label=tgt_lbl)
+            self._deliver_response(res.spoken_response, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.CLICK_UI_ELEMENT:
+            tgt_lbl = structured_action.parameters.get("target_label", user_text)
+            res = self.computer_agent.execute_visual_goal(tgt_lbl)
+            self._deliver_response(res.spoken_response, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.WHAT_AM_I_LOOKING_AT:
+            DashboardStatsManager.record_understood("Screen Awareness")
+            DashboardStatsManager.record_action("Observing screen with NOVA Eyes")
+            from personality.response_orchestrator import ResponseOrchestrator
+            is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
+
+            if structured_action.parameters.get("target") == "cursor":
+                res = self.computer_agent.what_is_at_cursor(is_hinglish=is_hi)
+            elif structured_action.parameters.get("mode") == "compare":
+                res = self.computer_agent.compare_visible_products(is_hinglish=is_hi)
+            elif structured_action.parameters.get("mode") == "summarize" or "summarize" in user_text.lower():
+                res = self.computer_agent.summarize_current_page(is_hinglish=is_hi)
+            else:
+                res = self.computer_agent.explain_screen_content(is_hinglish=is_hi, env_context=ctx)
+
+            orch = ResponseOrchestrator.format_action_response(
+                structured_action, res, user_text, screen_desc=res.spoken_response
+            )
+            DashboardStatsManager.record_result("✓ Screen observed" if res.success else "✗ Eyes unavailable", success=res.success)
+            self._deliver_orchestrated_response(orch, turn_id)
+            return True
+
+        if structured_action.intent in (
+            CanonicalIntent.SUMMARIZE_CURRENT_PAGE,
+            CanonicalIntent.EXPLAIN_PAGE,
+            CanonicalIntent.READ_CURRENT_PAGE,
+        ):
+            DashboardStatsManager.record_understood("Screen Summarization")
+            DashboardStatsManager.record_action("Summarizing visible page with NOVA Eyes")
+            from personality.response_orchestrator import ResponseOrchestrator
+            is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
+            res = self.computer_agent.summarize_current_page(is_hinglish=is_hi)
+            orch = ResponseOrchestrator.format_action_response(
+                structured_action, res, user_text, screen_desc=res.spoken_response
+            )
+            DashboardStatsManager.record_result("✓ Screen summarized" if res.success else "✗ Eyes unavailable", success=res.success)
+            self._deliver_orchestrated_response(orch, turn_id)
+            return True
+
+        return False
+
+    def _handle_web_research_intents(self, structured_action: StructuredAction, user_text: str, turn_id: str) -> bool:
+        """Handle Anakin live web intelligence search, deep research, and opening results."""
+        if structured_action.intent in (CanonicalIntent.SEARCH_WEB, CanonicalIntent.RESEARCH_TOPIC):
+            q = structured_action.parameters.get("query") or user_text
+            is_deep = (
+                structured_action.intent == CanonicalIntent.RESEARCH_TOPIC
+                or structured_action.parameters.get("mode") == "agentic_search"
+            )
+            und_name = "Deep Web Research" if is_deep else "Live Web Research"
+            DashboardStatsManager.record_understood(
+                und_name,
+                details={
+                    "Query": q,
+                    "Mode": "agentic_search" if is_deep else "search",
+                    "Subsystem": "Anakin Live Web Intelligence",
+                },
+            )
+
+            health = self.anakin_service.health_check()
+            if not health.is_available:
+                fail_msg = f"Live web research through Anakin is unavailable: {health.details}"
+                DashboardStatsManager.record_action("Anakin research skipped (unavailable)")
+                DashboardStatsManager.record_verify(health.details, success=False)
+                DashboardStatsManager.record_result(fail_msg, success=False)
+                self._deliver_response(fail_msg, turn_id)
+                return True
+
+            act_msg = (
+                f"Anakin deep research started for '{q}'"
+                if is_deep
+                else f"Anakin web research started for '{q}'"
+            )
+            DashboardStatsManager.record_action(act_msg)
+
+            try:
+                if is_deep:
+                    res = self.anakin_service.agentic_research(query=q)
+                    sources_list = [s.to_dict() for s in res.sources]
+                    summary_text = res.summary
+                    sc_count = res.source_count
+                    ret_sources = res.sources
+                else:
+                    res = self.anakin_service.search(query=q, limit=5)
+                    sources_list = [s.to_dict() for s in res.sources]
+                    summary_text = ""
+                    sc_count = res.source_count
+                    ret_sources = res.sources
+
+                self.recent_context.record_web_research(
+                    query=q,
+                    sources=sources_list,
+                    summary=summary_text,
+                    mode="agentic_search" if is_deep else "search",
+                )
+
+                DashboardStatsManager.record_action(f"Anakin returned {sc_count} sources")
+                DashboardStatsManager.record_verify("Live web research successful", success=True)
+                DashboardStatsManager.record_result(f"Found {sc_count} sources", success=True)
+
+                spoken = self._synthesize_web_research_response(
+                    query=q,
+                    sources=ret_sources,
+                    summary=summary_text,
+                    is_deep=is_deep,
+                )
+                self._deliver_response(spoken, turn_id)
+                return True
+
+            except Exception as exc:
+                logger.error("Anakin research failed for '%s': %s", q, exc, exc_info=True)
+                DashboardStatsManager.record_action("Anakin research failed")
+                DashboardStatsManager.record_verify(f"Failure: {exc}", success=False)
+                DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
+                self._deliver_response(f"I couldn't complete web research because: {exc}", turn_id)
+                return True
+
+        if structured_action.intent == CanonicalIntent.OPEN_RESULT:
+            idx = structured_action.parameters.get("target_index", 1)
+            resolved = self.recent_context.resolve_reference(f"the {idx} result")
+            target_url = None
+            target_title = None
+            if resolved.resolved and resolved.target_type == "search_result" and isinstance(resolved.target_value, dict):
+                target_url = resolved.target_value.get("url")
+                target_title = resolved.target_value.get("title")
+            elif self.recent_context.last_search_results and 1 <= idx <= len(self.recent_context.last_search_results):
+                item = self.recent_context.last_search_results[idx - 1]
+                target_url = item.get("url")
+                target_title = item.get("title")
+
+            if target_url:
+                DashboardStatsManager.record_understood("Open Search Result", details={"Index": idx, "URL": target_url})
+                DashboardStatsManager.record_action(f"Opening {target_title or target_url} in browser")
+                self.browser_manager.execute_command(f"open {target_url}")
+                DashboardStatsManager.record_verify(f"Opened result #{idx}", success=True)
+                DashboardStatsManager.record_result(f"Opened {target_title or 'result'}", success=True)
+                spoken = f"Opening {target_title or 'the result'} in your browser, Boss."
+                self._deliver_response(spoken, turn_id)
+                return True
+            else:
+                self._deliver_response(f"I couldn't find result number {idx} from the recent research.", turn_id)
+                return True
+
+        return False
+
+    def _handle_task_agent_and_safety_intents(
+        self,
+        structured_action: StructuredAction,
+        routing_domain: RoutingDomain,
+        user_text: str,
+        turn_id: str,
+        ctx: EnvironmentContext,
+    ) -> bool:
+        """Handle autonomous task planning, dangerous action confirmations, and reminder requests."""
+        if routing_domain == RoutingDomain.TASK_AGENT or structured_action.intent == CanonicalIntent.AUTONOMOUS_TASK:
+            self.task_planner.provider_mgr = self.provider_manager
+            plan = self.task_planner.plan_goal(user_text)
+            task_res = self.task_executor.execute_plan(plan, context=self.active_task_context)
+            self._deliver_response(task_res.spoken_response, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.DELETE_ITEM:
+            res = ContextResolver.resolve_target("this", ctx, target_type="any")
+            if res["resolved"] and isinstance(res["target"], Path):
+                target_p = res["target"]
+                ctx.pending_confirmation = {
+                    "action": "DELETE_ITEM",
+                    "target_path": str(target_p),
+                }
+                spoken = f"Do you want me to delete {target_p.name}?"
+                self._deliver_response(spoken, turn_id)
+                return True
+            else:
+                spoken = "I couldn't identify which file or folder you want to delete. Please select an item first."
+                self._deliver_response(spoken, turn_id)
+                return True
+
+        if structured_action.intent == CanonicalIntent.REMINDER_REQUEST:
+            time_str = structured_action.parameters.get("time_str", "that time")
+            ctx.pending_confirmation = {
+                "action": "REMINDER_REQUEST",
+                "time_str": time_str,
+                "original_request": user_text,
+            }
+            prompt = structured_action.clarification_prompt or f"Do you want me to remind you at {time_str}?"
+            self._deliver_response(prompt, turn_id)
+            return True
+
+        return False
+
+    def _handle_media_intents(self, structured_action: StructuredAction, user_text: str, turn_id: str) -> bool:
+        """Handle music playback, media requests, and YouTube Shorts."""
+        if structured_action.intent in (
+            CanonicalIntent.PLAY_MEDIA,
+            CanonicalIntent.LISTEN_TO_MUSIC,
+            CanonicalIntent.PLAY_SPECIFIC_SONG,
+            CanonicalIntent.PLAY_ARTIST,
+            CanonicalIntent.PLAY_GENRE,
+            CanonicalIntent.PLAY_MOOD,
+            CanonicalIntent.SEARCH_MUSIC,
+        ):
+            intent_label = {
+                CanonicalIntent.LISTEN_TO_MUSIC: "Listen to Music",
+                CanonicalIntent.PLAY_ARTIST: "Play Artist",
+                CanonicalIntent.PLAY_GENRE: "Play Genre",
+                CanonicalIntent.PLAY_MOOD: "Play Mood",
+                CanonicalIntent.PLAY_SPECIFIC_SONG: "Play Song",
+                CanonicalIntent.SEARCH_MUSIC: "Search Music",
+            }.get(structured_action.intent, "Play Media")
+            DashboardStatsManager.record_understood(intent_label, details=structured_action.parameters)
+            query = structured_action.parameters.get("query", "")
+            pref_info = self.recent_context.music_context.preference.to_search_query() if self.recent_context.music_context.active else "music"
+            action_desc = f"Playing '{query}' on YouTube" if query else f"Playing {pref_info} on YouTube"
+            DashboardStatsManager.record_action(action_desc)
+            from intent.router import structured_action_to_browser_plan
+            plan = structured_action_to_browser_plan(structured_action)
+            if plan:
+                res = self.browser_manager.execute_plan(plan)
+            else:
+                res = self.browser_manager.execute_command(user_text)
+            from personality.response_orchestrator import ResponseOrchestrator
+            orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
+            DashboardStatsManager.record_result(f"✓ {res.message}" if res and res.success else "✗ Playback unconfirmed", success=bool(res and res.success))
+            self._deliver_orchestrated_response(orch, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.WATCH_SHORTS:
+            DashboardStatsManager.record_understood("Watch Shorts", details=structured_action.parameters)
+            DashboardStatsManager.record_action("Opening YouTube Shorts")
+            from intent.router import structured_action_to_browser_plan
+            plan = structured_action_to_browser_plan(structured_action)
+            if plan:
+                res = self.browser_manager.execute_plan(plan)
+            else:
+                res = self.browser_manager.execute_command(user_text)
+
+            if res and res.success:
+                self.recent_context.update_browser_state(
+                    browser_name="Google Chrome",
+                    url=getattr(res, "url", "https://www.youtube.com/shorts"),
+                    title="YouTube Shorts",
+                )
+                self.recent_context.is_shorts_active = True
+                self.recent_context.add_turn(
+                    user_input=user_text,
+                    intent=CanonicalIntent.WATCH_SHORTS.value,
+                    action="watch_shorts",
+                    action_result=res.message,
+                    success=True,
+                    target_app="Google Chrome",
+                    target_browser="Google Chrome",
+                    current_url=getattr(res, "url", "https://www.youtube.com/shorts"),
+                    current_title="YouTube Shorts",
+                )
+            from personality.response_orchestrator import ResponseOrchestrator
+            orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
+            DashboardStatsManager.record_result("✓ YouTube Shorts opened" if res and res.success else "✗ Failed to open Shorts", success=bool(res and res.success))
+            self._deliver_orchestrated_response(orch, turn_id)
+            return True
+
+        return False
+
+    def _handle_browser_actions(
+        self,
+        structured_action: StructuredAction,
+        routing_domain: RoutingDomain,
+        user_text: str,
+        norm_text: str,
+        turn_id: str,
+    ) -> bool:
+        """Handle browser navigation, tab control, and scrolling actions."""
+        if routing_domain != RoutingDomain.BROWSER:
+            return False
+
+        from intent.router import structured_action_to_browser_plan
+        plan = structured_action_to_browser_plan(structured_action)
+        if plan:
+            res = self.browser_manager.execute_plan(plan)
+        else:
+            res = self.browser_manager.execute_command(norm_text) or self.browser_manager.execute_command(user_text)
+
+        if res is not None:
+            res_meta = getattr(res, "metadata", {}) or {}
+            res_url = getattr(res, "url", None) or res_meta.get("url")
+            res_title = res_meta.get("title")
+            res_msg = getattr(res, "message", "executed")
+            res_success = getattr(res, "success", True)
+            if structured_action.intent in (
+                CanonicalIntent.START_AUTO_SHORTS,
+                CanonicalIntent.STOP_AUTO_SHORTS,
+                CanonicalIntent.PAUSE_AUTO_SHORTS,
+                CanonicalIntent.RESUME_AUTO_SHORTS,
+            ):
+                self.recent_context.is_shorts_active = True
+                self.recent_context.is_auto_scroll_active = (
+                    structured_action.intent in (CanonicalIntent.START_AUTO_SHORTS, CanonicalIntent.RESUME_AUTO_SHORTS)
+                    and res_success
+                )
+            self.recent_context.add_turn(
+                user_input=user_text,
+                intent=structured_action.intent.value,
+                action=plan.action.value if plan else "browser_action",
+                action_result=res_msg,
+                success=res_success,
+                target_app="Google Chrome",
+                target_browser="Google Chrome",
+                current_url=res_url or self.recent_context.current_url,
+                current_title=res_title or self.recent_context.current_page_title,
+            )
+            from personality.response_orchestrator import ResponseOrchestrator
+            orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
+            self._deliver_orchestrated_response(orch, turn_id)
+            return True
+
+        if structured_action.intent in (
+            CanonicalIntent.SCROLL_DOWN,
+            CanonicalIntent.SCROLL_UP,
+            CanonicalIntent.SCROLL_TO_TOP,
+            CanonicalIntent.SCROLL_TO_BOTTOM,
+        ):
+            from browser.engine import MacOSNativeBrowserEngine
+            eng = MacOSNativeBrowserEngine()
+            if structured_action.intent == CanonicalIntent.SCROLL_TO_BOTTOM:
+                eng.scroll_to_bottom()
+                self._deliver_response("Scrolled to the bottom, Boss.", turn_id)
+            elif structured_action.intent == CanonicalIntent.SCROLL_TO_TOP:
+                eng.scroll_to_top()
+                self._deliver_response("Scrolled to the top, Boss.", turn_id)
+            elif structured_action.intent == CanonicalIntent.SCROLL_UP:
+                eng.scroll_page(direction="up")
+                self._deliver_response("Scrolled up, Boss.", turn_id)
+            else:
+                eng.scroll_page(direction="down")
+                self._deliver_response("Scrolled down, Boss.", turn_id)
+            return True
+
+        return False
+
+    def _handle_desktop_actions(
+        self,
+        structured_action: StructuredAction,
+        routing_domain: RoutingDomain,
+        user_text: str,
+        norm_text: str,
+        turn_id: str,
+    ) -> bool:
+        """Handle desktop applications, camera, document generation, and filesystem operations."""
+        if routing_domain == RoutingDomain.DESKTOP_APP:
+            if structured_action.intent == CanonicalIntent.OPEN_CAMERA:
+                DashboardStatsManager.record_understood("Open Camera", details={"Target": "Camera"})
+                DashboardStatsManager.record_action("Opening Camera")
+                res = self.desktop_manager.camera_mgr.open_camera()
+                DashboardStatsManager.record_result("✓ Camera opened" if res.success else f"✗ Failed: {res.message}", success=res.success)
+                self._deliver_response(res.spoken_response, turn_id)
+                return True
+
+            if structured_action.intent == CanonicalIntent.TAKE_PHOTO:
+                DashboardStatsManager.record_understood("Take Photo", details={"Target": "Camera"})
+                DashboardStatsManager.record_action("Capturing photo")
+                res = self.desktop_manager.camera_mgr.capture_photo()
+                DashboardStatsManager.record_result("✓ Photo captured" if res.success else f"✗ Failed: {res.message}", success=res.success)
+                self._deliver_response(res.spoken_response, turn_id)
+                return True
+
+            if structured_action.intent == CanonicalIntent.LAUNCH_APP:
+                app_name = structured_action.parameters.get("app_name", "")
+                DashboardStatsManager.record_understood("Open Application", details={"Target": app_name})
+                DashboardStatsManager.record_action(f"Opening {app_name}")
+                from desktop.apps import AppLauncher
+                start_t = time.monotonic()
+                success, msg, spoken = AppLauncher.launch(app_name)
+                lat_ms = (time.monotonic() - start_t) * 1000
+                if success:
+                    DashboardStatsManager.record_verify(f"{app_name} opened and active", success=True)
+                    DashboardStatsManager.record_result(f"{app_name} launched successfully.", success=True)
+                    self.recent_context.add_turn(
+                        user_input=user_text,
+                        intent="launch_app",
+                        action="open_application",
+                        action_result=f"Opened {app_name}",
+                        success=True,
+                        target_app=app_name,
+                    )
+                    if "chrome" in app_name.lower():
+                        self.recent_context.update_browser_state(browser_name="Google Chrome")
+                    elif "safari" in app_name.lower():
+                        self.recent_context.update_browser_state(browser_name="Safari")
+                    try:
+                        if hasattr(self, "active_task_context") and self.active_task_context:
+                            if hasattr(self.active_task_context, "register_application"):
+                                self.active_task_context.register_application(app_name)
+                            elif hasattr(self.active_task_context, "register_app"):
+                                self.active_task_context.register_app(app_name)
+                    except Exception as bookkeeping_err:
+                        logger.warning("Failed post-launch bookkeeping for %s: %s", app_name, bookkeeping_err)
+                else:
+                    DashboardStatsManager.record_result(f"Failed to open {app_name}: {msg}", success=False)
+                DashboardStatsManager.record_mac_action(
+                    command_text=user_text,
+                    intent="application.open",
+                    target=app_name,
+                    status="SUCCESS" if success else "FAILED",
+                    latency_ms=lat_ms,
+                    result_message=spoken,
+                )
+                self._deliver_response(spoken, turn_id)
+                return True
+
+            if structured_action.intent == CanonicalIntent.CLOSE_APP:
+                app_name = structured_action.parameters.get("app_name", "")
+                DashboardStatsManager.record_understood("Close Application", details={"Target": app_name})
+                DashboardStatsManager.record_action(f"Closing {app_name}")
+                from desktop.apps import AppLauncher
+                start_t = time.monotonic()
+                success, msg, spoken = AppLauncher.close(app_name)
+                lat_ms = (time.monotonic() - start_t) * 1000
+                if success:
+                    DashboardStatsManager.record_result(f"✓ {app_name} closed", success=True)
+                    self.recent_context.add_turn(
+                        user_input=user_text,
+                        intent="close_app",
+                        action="close_application",
+                        action_result=f"Closed {app_name}",
+                        success=True,
+                        target_app=None,
+                    )
+                else:
+                    DashboardStatsManager.record_result(f"✗ Failed to close {app_name}: {msg}", success=False)
+                DashboardStatsManager.record_mac_action(
+                    command_text=user_text,
+                    intent="application.close",
+                    target=app_name,
+                    status="SUCCESS" if success else "FAILED",
+                    latency_ms=lat_ms,
+                    result_message=spoken,
+                )
+                self._deliver_response(spoken, turn_id)
+                return True
+
+        if routing_domain in (RoutingDomain.FILESYSTEM, RoutingDomain.DOCUMENT_WRITING, RoutingDomain.DESKTOP_APP):
+            if structured_action.intent == CanonicalIntent.GENERATE_AND_WRITE_DOCUMENT or routing_domain == RoutingDomain.DOCUMENT_WRITING:
+                from desktop.editor import DocumentEditor
+                topic = structured_action.parameters.get("topic") or structured_action.parameters.get("content") or user_text
+                fname = structured_action.parameters.get("filename", "document.txt")
+                dest = structured_action.parameters.get("destination", "Notepad")
+                DashboardStatsManager.record_understood(
+                    "WRITE",
+                    details={
+                        "Destination": dest,
+                        "Content": f'"{topic}"',
+                        "Confidence": f"{int(structured_action.confidence * 100)}%",
+                    },
+                )
+                DashboardStatsManager.record_action(f"Writing content to {dest}")
+                desktop_result = DocumentEditor.write_and_open_document(
+                    topic=topic,
+                    filename=fname,
+                    destination=dest,
+                )
+                if desktop_result.success:
+                    DashboardStatsManager.record_verify(f"{dest} content written successfully", success=True)
+                    DashboardStatsManager.record_result(f"✓ Written to {dest}", success=True)
+                else:
+                    DashboardStatsManager.record_verify(f"Failed to write to {dest}: {desktop_result.error}", success=False)
+                    DashboardStatsManager.record_result(f"✗ Write failed: {desktop_result.error}", success=False)
+                self._deliver_response(desktop_result.spoken_response, turn_id)
+                return True
+
+            desktop_result = self.desktop_manager.process_input(norm_text) or self.desktop_manager.process_input(user_text)
+            if desktop_result is not None:
+                if desktop_result.success and desktop_result.target_path:
+                    tp = Path(desktop_result.target_path)
+                    if tp.is_dir():
+                        self.active_task_context.register_folder(tp.name, tp)
+                    elif tp.is_file():
+                        self.active_task_context.register_file(tp.name, tp)
+                self._deliver_response(desktop_result.spoken_response, turn_id)
+                return True
+
+        return False
+
+    def _handle_mac_control_actions(
+        self,
+        structured_action: StructuredAction,
+        routing_domain: RoutingDomain,
+        user_text: str,
+        turn_id: str,
+        ctx: EnvironmentContext,
+    ) -> bool:
+        """Handle macOS hardware control: clipboard, Wi-Fi, Bluetooth, volume, brightness, shutdown."""
+        if routing_domain != RoutingDomain.SYSTEM:
+            return False
+
+        if structured_action.intent == CanonicalIntent.GET_CLIPBOARD:
+            try:
+                from mac_control.actions.clipboard import get_clipboard
+                clip_text = get_clipboard()
+                spoken = f"Your clipboard contains: {clip_text[:120]}" if clip_text else "Your clipboard is currently empty."
+            except Exception:
+                spoken = "I could not access the clipboard."
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.CLEAR_CLIPBOARD:
+            try:
+                from mac_control.actions.clipboard import clear_clipboard
+                clear_clipboard()
+                spoken = "Clipboard cleared, Boss."
+            except Exception:
+                spoken = "Failed to clear clipboard."
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.SET_CLIPBOARD:
+            try:
+                from mac_control.actions.clipboard import set_clipboard
+                text_to_set = structured_action.parameters.get("text", "")
+                if structured_action.parameters.get("use_context"):
+                    if ctx.current_url:
+                        text_to_set = ctx.current_url
+                    elif ctx.last_created_path:
+                        text_to_set = str(ctx.last_created_path)
+                set_clipboard(text_to_set)
+                spoken = "Copied to clipboard, Boss."
+            except Exception:
+                spoken = "Failed to set clipboard."
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.CONTROL_WIFI:
+            act = structured_action.parameters.get("action", "status")
+            und_name = "Wi-Fi Control" if act in ("on", "off") else ("Get Wi-Fi Network" if act == "ssid" else ("Get Network Details" if act == "details" else "Get Wi-Fi Status"))
+            act_desc = "Turning Wi-Fi on" if act == "on" else ("Turning Wi-Fi off" if act == "off" else ("Checking Wi-Fi network" if act == "ssid" else ("Checking network details" if act == "details" else "Checking Wi-Fi status")))
+            DashboardStatsManager.record_understood(und_name, details={"Intent": "network.wifi", "Action": act, "Target": "Wi-Fi"})
+            DashboardStatsManager.record_action(act_desc)
+            try:
+                from mac_control.actions.wifi import execute_wifi_command
+                from mac_control.models import CommandCategory, MacCommand
+                cmd = MacCommand(category=CommandCategory.NETWORK, action=act, raw_input=user_text)
+                res = execute_wifi_command(cmd)
+                spoken = res.message
+                is_succ = (res.status.value == "SUCCESS")
+                DashboardStatsManager.record_verify(f"Wi-Fi verified: {spoken}", success=is_succ)
+                DashboardStatsManager.record_result(spoken, success=is_succ)
+                DashboardStatsManager.record_mac_action(
+                    command_text=user_text,
+                    intent="network.wifi",
+                    target="Wi-Fi",
+                    status="SUCCESS" if is_succ else "FAILED",
+                    latency_ms=res.execution_time_ms,
+                    result_message=spoken,
+                )
+            except Exception as exc:
+                logger.error("Wi-Fi control error: %s", exc, exc_info=True)
+                spoken = f"Boss, I couldn't control Wi-Fi because: {exc}"
+                DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
+                DashboardStatsManager.record_mac_action(
+                    command_text=user_text,
+                    intent="network.wifi",
+                    target="Wi-Fi",
+                    status="FAILED",
+                    result_message=str(exc),
+                )
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.CONTROL_BLUETOOTH:
+            act = structured_action.parameters.get("action", "status")
+            und_name = "Bluetooth Control" if act in ("on", "off") else ("Get Bluetooth Devices" if act in ("devices", "connected", "which", "list") else "Get Bluetooth Status")
+            act_desc = "Turning Bluetooth on" if act == "on" else ("Turning Bluetooth off" if act == "off" else ("Checking connected Bluetooth devices" if act in ("devices", "connected", "which", "list") else "Checking Bluetooth status"))
+            DashboardStatsManager.record_understood(und_name, details={"Intent": "network.bluetooth", "Action": act, "Target": "Bluetooth"})
+            DashboardStatsManager.record_action(act_desc)
+            try:
+                from mac_control.actions.bluetooth import execute_bluetooth_command
+                from mac_control.models import CommandCategory, MacCommand
+                cmd = MacCommand(category=CommandCategory.NETWORK, action=act, raw_input=user_text)
+                res = execute_bluetooth_command(cmd)
+                spoken = res.message
+                is_succ = (res.status.value == "SUCCESS")
+                DashboardStatsManager.record_verify(f"Bluetooth verified: {spoken}", success=is_succ)
+                DashboardStatsManager.record_result(spoken, success=is_succ)
+                DashboardStatsManager.record_mac_action(
+                    command_text=user_text,
+                    intent="network.bluetooth",
+                    target="Bluetooth",
+                    status="SUCCESS" if is_succ else "FAILED",
+                    latency_ms=res.execution_time_ms,
+                    result_message=spoken,
+                )
+            except Exception as exc:
+                logger.error("Bluetooth control error: %s", exc, exc_info=True)
+                spoken = f"Boss, I couldn't control Bluetooth because: {exc}"
+                DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
+                DashboardStatsManager.record_mac_action(
+                    command_text=user_text,
+                    intent="network.bluetooth",
+                    target="Bluetooth",
+                    status="FAILED",
+                    result_message=str(exc),
+                )
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.LOCK_SCREEN:
+            try:
+                from mac_control.actions.system import lock_screen
+                lock_screen()
+                spoken = "Screen locked, Boss."
+            except Exception:
+                spoken = "Failed to lock screen."
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.SYSTEM_SHUTDOWN:
+            is_uncertain = (self._current_turn_source == "voice" and getattr(self, "_last_turn_quality", None) == QualityDecision.UNCERTAIN)
+            if is_uncertain:
+                ctx.pending_confirmation = {"action": "SHUTDOWN_REQUEST"}
+                self._deliver_response("I heard 'shutdown'. Did you mean shut down NOVA?", turn_id)
+                return True
+            self._execute_local_shutdown()
+            return True
+
+        if structured_action.intent == CanonicalIntent.CONTROL_BRIGHTNESS:
+            from mac_control.actions.brightness import execute_brightness_command
+            from mac_control.models import CommandCategory, MacCommand
+            act = structured_action.parameters.get("action", "increase")
+            val = structured_action.parameters.get("value")
+            und_details = {"Target": "Mac display"}
+            if val is not None:
+                und_details["Value"] = f"{val}%"
+            und_name = "Set Brightness" if act == "set" else ("Increase Brightness" if act == "increase" else ("Decrease Brightness" if act == "decrease" else "Get Brightness"))
+            DashboardStatsManager.record_understood(und_name, details=und_details)
+            act_desc = f"Setting brightness to {val}%" if act == "set" and val is not None else ("Increasing brightness" if act == "increase" else ("Decreasing brightness" if act == "decrease" else f"{act.title()}ing brightness"))
+            DashboardStatsManager.record_action(act_desc)
+            args = {k: v for k, v in structured_action.parameters.items() if k != "action"}
+            cmd = MacCommand(
+                category=CommandCategory.BRIGHTNESS,
+                action=act,
+                args=args,
+                raw_input=user_text,
+            )
+            start_t = time.monotonic()
+            res = execute_brightness_command(cmd)
+            lat_ms = (time.monotonic() - start_t) * 1000
+            is_succ = (res.status.value == "SUCCESS")
+            if is_succ:
+                actual_bright = res.details.get("actual_value", val) if res.details else val
+                if val is None and act == "increase":
+                    res_msg = "Brightness increased successfully."
+                    spoken = "Done Boss. Brightness increased."
+                elif val is None and act == "decrease":
+                    res_msg = "Brightness decreased successfully."
+                    spoken = "Done Boss. Brightness decreased."
+                elif actual_bright is not None:
+                    res_msg = f"Brightness is now {actual_bright}%."
+                    spoken = f"Done Boss. Brightness is now {actual_bright}%."
+                else:
+                    res_msg = f"{res.message} successfully." if not res.message.endswith("successfully.") else res.message
+                    spoken = f"Done Boss. {res.message}."
+                DashboardStatsManager.record_verify(f"Actual screen brightness: {actual_bright}%" if actual_bright is not None else "Brightness adjusted", success=True)
+                DashboardStatsManager.record_result(res_msg, success=True)
+            else:
+                DashboardStatsManager.record_verify(f"Brightness adjustment failed: {res.message}", success=False)
+                DashboardStatsManager.record_result(f"Failed: {res.message}", success=False)
+                spoken = f"Sorry Boss, I couldn't adjust the brightness: {res.message}"
+            DashboardStatsManager.record_mac_action(
+                command_text=user_text,
+                intent=f"system.brightness.{act}",
+                target="Brightness",
+                status="SUCCESS" if is_succ else "FAILED",
+                latency_ms=lat_ms,
+                result_message=spoken,
+            )
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        if structured_action.intent == CanonicalIntent.CONTROL_VOLUME:
+            from mac_control.actions.volume import execute_volume_command
+            from mac_control.models import CommandCategory, MacCommand
+            act = structured_action.parameters.get("action", "increase")
+            val = structured_action.parameters.get("value")
+            und_details = {"Target": "System audio"}
+            if val is not None:
+                und_details["Value"] = f"{val}%"
+            und_name = "Set Volume" if act == "set" else ("Increase Volume" if act == "increase" else ("Decrease Volume" if act == "decrease" else ("Mute Audio" if act == "mute" else ("Unmute Audio" if act == "unmute" else "Get Volume"))))
+            DashboardStatsManager.record_understood(und_name, details=und_details)
+            act_desc = f"Setting volume to {val}%" if act == "set" and val is not None else ("Increasing volume" if act == "increase" else ("Decreasing volume" if act == "decrease" else ("Muting volume" if act == "mute" else ("Unmuting volume" if act == "unmute" else f"{act.title()}ing volume"))))
+            DashboardStatsManager.record_action(act_desc)
+            args = {k: v for k, v in structured_action.parameters.items() if k != "action"}
+            cmd = MacCommand(
+                category=CommandCategory.VOLUME,
+                action=act,
+                args=args,
+                raw_input=user_text,
+            )
+            start_t = time.monotonic()
+            res = execute_volume_command(cmd)
+            lat_ms = (time.monotonic() - start_t) * 1000
+            is_succ = (res.status.value == "SUCCESS")
+            if is_succ:
+                actual_vol = res.details.get("actual_value", val) if res.details else val
+                if val is None and act == "increase":
+                    res_msg = "Volume increased successfully."
+                    spoken = "Done Boss. Volume increased."
+                elif val is None and act == "decrease":
+                    res_msg = "Volume decreased successfully."
+                    spoken = "Done Boss. Volume decreased."
+                elif act in ("mute", "unmute"):
+                    res_msg = f"{res.message} successfully." if not res.message.endswith("successfully.") else res.message
+                    spoken = f"Done Boss. {res.message}."
+                elif actual_vol is not None:
+                    res_msg = f"Volume is now {actual_vol}%."
+                    spoken = f"Done Boss. Volume is now {actual_vol}%."
+                else:
+                    res_msg = f"{res.message} successfully." if not res.message.endswith("successfully.") else res.message
+                    spoken = f"Done Boss. {res.message}."
+                DashboardStatsManager.record_verify(f"Actual system volume: {actual_vol}%" if actual_vol is not None else "Volume adjusted", success=True)
+                DashboardStatsManager.record_result(res_msg, success=True)
+            else:
+                DashboardStatsManager.record_verify(f"Volume adjustment failed: {res.message}", success=False)
+                DashboardStatsManager.record_result(f"Failed: {res.message}", success=False)
+                spoken = f"Sorry Boss, I couldn't adjust the volume: {res.message}"
+            DashboardStatsManager.record_mac_action(
+                command_text=user_text,
+                intent=f"system.volume.{act}",
+                target="Volume",
+                status="SUCCESS" if is_succ else "FAILED",
+                latency_ms=lat_ms,
+                result_message=spoken,
+            )
+            self._deliver_response(spoken, turn_id)
+            return True
+
+        return False
+
+    def _handle_desktop_and_browser_fallback(self, user_text: str, turn_id: str) -> bool:
+        """Process fallback queries across desktop and browser subsystems."""
+        desktop_result = self.desktop_manager.process_input(user_text)
+        if desktop_result is not None:
+            self._deliver_response(desktop_result.spoken_response, turn_id)
+            return True
+
+        browser_result = self.browser_manager.execute_command(user_text)
+        if browser_result is not None:
+            self._deliver_response(browser_result.spoken_response, turn_id)
+            return True
+
+        return False
+
+    def _handle_conversation_turn(self, user_text: str, request: TurnRequest, turn_id: str) -> None:
+        """Execute conversation synthesis turn via provider LLMs, memory, and TTS."""
+        if self.emotion_engine is None:
+            self.emotion_engine = EmotionEngine()
+        if self.system_prompt_manager is None:
+            self.system_prompt_manager = SystemPromptManager()
+        if self.provider_manager is None:
+            from providers.provider_manager import ProviderManager
+            self.provider_manager = ProviderManager()
+
+        DashboardStatsManager.record_understood("Conversational Query")
+        analysis: ConversationAnalysis = self.emotion_engine.analyze_text(user_text)
+        memory_summary = self._build_memory_summary(user_text)
+        task_type = self._map_mode_to_task_type(analysis.detected_mode)
+        profile_name = self._map_mode_to_profile(analysis.detected_mode)
+        active_provider = self._peek_active_provider(task_type)
+
+        self.event_bus.publish(NovaEvent.THINKING_STARTED, text=user_text)
+
+        screen_summary = None
+        try:
+            if hasattr(self, "computer_agent") and self.computer_agent and self.computer_agent.eyes:
+                st = self.computer_agent.eyes.get_latest_state()
+                if st:
+                    from personality.response_orchestrator import ResponseOrchestrator
+                    is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
+                    screen_summary = st.get_natural_screen_description(is_hinglish=is_hi)
+        except Exception:
+            pass
+
+        context = PromptBuildContext(
+            memory_summary=memory_summary,
+            current_project=self.activity.current_project,
+            current_task=self.activity.current_task,
+            emotion=analysis.emotion_description,
+            current_provider=active_provider,
+            voice_mode=(request.source == "voice"),
+            audio_event=request.audio_event,
+            screen_summary=screen_summary,
+        )
+
+        DashboardStatsManager.update("active_provider", active_provider or "Gemini")
+
+        gen_start = time.monotonic()
+        response_text = self._generate_response(user_text, context, profile_name, task_type, turn_id)
+        gen_elapsed = time.monotonic() - gen_start
+        DashboardStatsManager.update("latency", f"{gen_elapsed:.2f}s")
+
+        if response_text is None:
+            DashboardStatsManager.record_error("No response generated from AI providers")
+            return
+
+        self.event_bus.publish(
+            NovaEvent.RESPONSE_GENERATED, text=response_text, provider=active_provider
+        )
+
+        if self._should_remember(user_text, analysis):
+            self._write_memory(user_text, response_text, analysis)
+
+        self._conversation_history.append({"role": "user", "content": user_text})
+        self._conversation_history.append({"role": "assistant", "content": response_text})
+        self.activity.last_conversation_topic = user_text[:200]
+
+        self._deliver_response(response_text, turn_id)
+        DashboardStatsManager.record_result("Conversation completed", success=True)
+
+    def _process_turn(self, request: TurnRequest) -> None:
+        """Run one complete interaction turn."""
+        turn_id = uuid.uuid4().hex[:8]
+        user_text = request.text.strip()
+
+        if request.is_isolated_audio_event:
+            self._handle_isolated_audio_event(request, turn_id)
+            return
+
+        if not user_text:
+            return
+
+        self._prepare_turn_state(request, user_text, turn_id)
+
         try:
             # 0. Real-time Environment Observation
             ctx = self.environment_observer.refresh(force=True)
 
-            # 1. Handle Pending Confirmation State (e.g. Delete Confirmation, Reminders, Shutdown)
-            if ctx.pending_confirmation:
-                pending = ctx.pending_confirmation
-                ctx.pending_confirmation = None  # Clear state
-                norm_lower = user_text.lower().strip()
-
-                if norm_lower in ("yes", "ha", "haan", "sure", "do it", "confirm", "proceed", "yes please", "theek hai"):
-                    action_type = pending.get("action")
-                    if action_type == "SHUTDOWN_REQUEST":
-                        DashboardStatsManager.record_understood("System Shutdown")
-                        DashboardStatsManager.record_action("Shutting down NOVA")
-                        self._deliver_response("Shutting down now. Goodbye Boss.", turn_id)
-                        DashboardStatsManager.record_result("Shutdown initiated", success=True)
-                        self._execute_local_shutdown()
-                        return
-                    elif action_type == "DELETE_ITEM":
-                        target_p = pending.get("target_path")
-                        if target_p and Path(target_p).exists():
-                            DashboardStatsManager.record_understood("Delete Item", details={"Target": Path(target_p).name})
-                            DashboardStatsManager.record_action(f"Deleting {Path(target_p).name}")
-                            from desktop.files import FileSystemManager
-                            success, msg = FileSystemManager.safe_move_to_trash(Path(target_p))
-                            reply = f"Deleted {Path(target_p).name}." if success else f"Could not delete: {msg}"
-                            self._deliver_response(reply, turn_id)
-                            DashboardStatsManager.record_result(f"✓ Deleted {Path(target_p).name}" if success else f"✗ Delete failed: {msg}", success=success)
-                            return
-                    elif action_type == "REMINDER_REQUEST":
-                        time_str = pending.get("time_str", "")
-                        DashboardStatsManager.record_understood("Reminder Confirmed", details={"Time": time_str})
-                        reply = f"Understood Boss. I've noted down your reminder for {time_str}."
-                        self._deliver_response(reply, turn_id)
-                        DashboardStatsManager.record_result(f"✓ Reminder set for {time_str}", success=True)
-                        return
-                elif norm_lower in ("no", "nah", "nahi", "cancel", "don't do it", "mat karo", "abort", "nevermind"):
-                    DashboardStatsManager.record_understood("Action Cancelled")
-                    self._deliver_response("Action cancelled, Boss.", turn_id)
-                    DashboardStatsManager.record_result("Action cancelled by user", success=True)
-                    return
+            # 1. Handle Pending Confirmation State
+            if self._handle_pending_confirmation(ctx, user_text, turn_id):
+                return
 
             # 2. Local Voice Commands
             if self.command_router.route(user_text):
@@ -713,922 +1713,51 @@ class NovaApplication:
                 DashboardStatsManager.record_result("Command executed", success=True)
                 return
 
-            # 3. Layered Intent Classification & Routing with N-best Alternative Hypotheses
-            candidates: list[str] = []
-            if hasattr(request, "transcription") and request.transcription:
-                candidates = list(getattr(request.transcription, "alternatives", []) or [])
-            if request.raw_transcript and request.raw_transcript not in candidates:
-                candidates.insert(0, request.raw_transcript)
-            if user_text not in candidates:
-                candidates.insert(0, user_text)
-
-            # Retrieve real-time Eyes / screen state if available
-            eyes_state = None
-            if hasattr(self, "computer_agent") and hasattr(self.computer_agent, "eyes"):
-                try:
-                    eyes_state = self.computer_agent.eyes.get_latest_state()
-                except Exception:
-                    eyes_state = None
-
-            structured_action = self.intent_engine.parse(
-                user_text,
-                allow_ai_fallback=False,
-                candidates=candidates,
-                context=self.recent_context,
-                screen_state=eyes_state,
+            # 3. Layered Intent Classification & Routing
+            structured_action, routing_domain, norm_text = self._classify_turn_intent(
+                request, user_text
             )
-            norm_text = structured_action.normalized_input or user_text
-            routing_domain = get_routing_domain(structured_action.intent)
 
-            # Record Contextual Resolution if reference/target is present
-            if "reference" in structured_action.parameters or "target" in structured_action.parameters:
-                ref_label = structured_action.parameters.get("reference") or structured_action.parameters.get("target")
-                resolved = self.recent_context.resolve_reference(str(ref_label))
-                if resolved:
-                    DashboardStatsManager.record_resolve(
-                        target=f"{resolved.app_name or 'Current Browser'} tab: {resolved.title or resolved.url or 'Active'}",
-                        details={"entity_type": resolved.entity_type, "confidence": resolved.confidence},
-                    )
-
-            # 3A. Cancellation Actions ("Stop", "Cancel", "Never mind")
-            if structured_action.intent == CanonicalIntent.CANCEL_ACTION:
-                DashboardStatsManager.record_understood("Cancel Action")
-                DashboardStatsManager.record_action("Stopping active tasks")
-                self.task_executor.cancel_task()
-                self.computer_agent.stop_active_task()
-                self.desktop_manager.stop_active_task()
-                if hasattr(self.browser_manager, "stop_active_task"):
-                    self.browser_manager.stop_active_task()
-                elif hasattr(self.browser_manager, "cancel_active_task"):
-                    self.browser_manager.cancel_active_task()
-                self._deliver_response("Stopped active tasks, Boss.", turn_id)
-                DashboardStatsManager.record_result("✓ Active tasks stopped", success=True)
+            # 4. First-Class Intent Dispatch
+            if self._handle_system_intents(structured_action, user_text, turn_id):
                 return
 
-            # 3B. Screen Recording Manager Actions
-            if structured_action.intent == CanonicalIntent.START_SCREEN_RECORDING:
-                logger.info("Detected START_SCREEN_RECORDING intent: '%s'", user_text)
-                DashboardStatsManager.record_understood("Start Screen Recording")
-                DashboardStatsManager.record_action("Starting screen recording")
-                start_t = time.monotonic()
-                res = self.screen_recording_manager.start_recording()
-                lat_ms = (time.monotonic() - start_t) * 1000
-                self._deliver_response(res.spoken_response, turn_id)
-                DashboardStatsManager.record_result("● Screen recording started" if res.success else f"✗ Failed: {res.error}", success=res.success)
-                DashboardStatsManager.record_mac_action(
-                    command_text=user_text,
-                    intent="system.screen_recording.start",
-                    target="Screen",
-                    status="RECORDING" if res.success else "FAILED",
-                    latency_ms=lat_ms,
-                    result_message=res.spoken_response,
-                )
+            if self._handle_visual_intents(structured_action, routing_domain, user_text, turn_id, ctx):
                 return
 
-            if structured_action.intent == CanonicalIntent.STOP_SCREEN_RECORDING:
-                logger.info("Detected STOP_SCREEN_RECORDING intent: '%s'", user_text)
-                DashboardStatsManager.record_understood("Stop Screen Recording")
-                DashboardStatsManager.record_action("Stopping screen recording")
-                start_t = time.monotonic()
-                res = self.screen_recording_manager.stop_recording()
-                lat_ms = (time.monotonic() - start_t) * 1000
-                self._deliver_response(res.spoken_response, turn_id)
-                DashboardStatsManager.record_result("✓ Screen recording stopped" if res.success else f"✗ Failed: {res.error}", success=res.success)
-                DashboardStatsManager.record_mac_action(
-                    command_text=user_text,
-                    intent="system.screen_recording.stop",
-                    target="Screen",
-                    status="STOPPED" if res.success else "FAILED",
-                    latency_ms=lat_ms,
-                    result_message=res.spoken_response,
-                )
+            if self._handle_web_research_intents(structured_action, user_text, turn_id):
                 return
 
-            # 3B-2. Screenshot Capture Action
-            if structured_action.intent == CanonicalIntent.SCREEN_CAPTURE:
-                logger.info("Detected screenshot intent: '%s'", user_text)
-                DashboardStatsManager.record_understood("Screenshot")
-                DashboardStatsManager.record_action("Capturing screen")
-                start_t = time.monotonic()
-                res = screenshot_service.capture_full_screen()
-                lat_ms = (time.monotonic() - start_t) * 1000
-                if res.success:
-                    spoken = "Screenshot captured successfully and saved to your Desktop."
-                    target_file = getattr(res, "file_path", None) or getattr(res, "saved_path", None)
-                    saved_info = f"\nSaved to: {target_file}" if target_file else ""
-                    DashboardStatsManager.record_verify(f"Screenshot saved to Desktop: {target_file}", success=True)
-                    DashboardStatsManager.record_result(f"✓ Screenshot captured{saved_info}", success=True)
-                else:
-                    spoken = f"Sorry Boss, I couldn't take a screenshot: {res.error}"
-                    DashboardStatsManager.record_verify(f"Screenshot failed: {res.error}", success=False)
-                    DashboardStatsManager.record_result(f"✗ Screenshot failed: {res.error}", success=False)
-                DashboardStatsManager.record_mac_action(
-                    command_text=user_text,
-                    intent="system.screenshot.capture",
-                    target="Screen",
-                    status="SUCCESS" if res.success else "FAILED",
-                    latency_ms=lat_ms,
-                    result_message=spoken,
-                )
-                self._deliver_response(spoken, turn_id)
-                return
-
-            # 3C. Visual / Computer Agent Actions
-            if routing_domain == RoutingDomain.VISUAL:
-                self.computer_agent.provider_mgr = self.provider_manager
-
-                if structured_action.intent == CanonicalIntent.CLOSE_POPUP:
-                    res = self.computer_agent.close_popup()
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.EXPLAIN_SCREEN_ERROR:
-                    res = self.computer_agent.explain_active_screen_error()
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.SCROLL_UNTIL_VISIBLE:
-                    tgt_text = structured_action.parameters.get("target_text", "")
-                    res = self.computer_agent.scroll_until_visible(tgt_text)
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.TYPE_UI_TEXT:
-                    text_val = structured_action.parameters.get("text", "")
-                    tgt_lbl = structured_action.parameters.get("target_label")
-                    res = self.computer_agent.type_into_focused_or_target(text_val, target_label=tgt_lbl)
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.CLICK_UI_ELEMENT:
-                    tgt_lbl = structured_action.parameters.get("target_label", user_text)
-                    res = self.computer_agent.execute_visual_goal(tgt_lbl)
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.WHAT_AM_I_LOOKING_AT:
-                    DashboardStatsManager.record_understood("Screen Awareness")
-                    DashboardStatsManager.record_action("Observing screen with NOVA Eyes")
-                    from personality.response_orchestrator import ResponseOrchestrator
-                    is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
-
-                    # Check if cursor inspection or product comparison was requested
-                    if structured_action.parameters.get("target") == "cursor":
-                        res = self.computer_agent.what_is_at_cursor(is_hinglish=is_hi)
-                    elif structured_action.parameters.get("mode") == "compare":
-                        res = self.computer_agent.compare_visible_products(is_hinglish=is_hi)
-                    elif structured_action.parameters.get("mode") == "summarize" or "summarize" in user_text.lower():
-                        res = self.computer_agent.summarize_current_page(is_hinglish=is_hi)
-                    else:
-                        res = self.computer_agent.explain_screen_content(is_hinglish=is_hi, env_context=ctx)
-
-                    orch = ResponseOrchestrator.format_action_response(
-                        structured_action, res, user_text, screen_desc=res.spoken_response
-                    )
-                    DashboardStatsManager.record_result("✓ Screen observed" if res.success else "✗ Eyes unavailable", success=res.success)
-                    self._deliver_orchestrated_response(orch, turn_id)
-                    return
-
-                if structured_action.intent in (
-                    CanonicalIntent.SUMMARIZE_CURRENT_PAGE,
-                    CanonicalIntent.EXPLAIN_PAGE,
-                    CanonicalIntent.READ_CURRENT_PAGE,
-                ):
-                    DashboardStatsManager.record_understood("Screen Summarization")
-                    DashboardStatsManager.record_action("Summarizing visible page with NOVA Eyes")
-                    from personality.response_orchestrator import ResponseOrchestrator
-                    is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
-                    res = self.computer_agent.summarize_current_page(is_hinglish=is_hi)
-                    orch = ResponseOrchestrator.format_action_response(
-                        structured_action, res, user_text, screen_desc=res.spoken_response
-                    )
-                    DashboardStatsManager.record_result("✓ Screen summarized" if res.success else "✗ Eyes unavailable", success=res.success)
-                    self._deliver_orchestrated_response(orch, turn_id)
-                    return
-
-            # 3C-2. Live Web Intelligence (Anakin API Search & Agentic Research)
-            if structured_action.intent in (
-                CanonicalIntent.SEARCH_WEB,
-                CanonicalIntent.RESEARCH_TOPIC,
+            if self._handle_task_agent_and_safety_intents(
+                structured_action, routing_domain, user_text, turn_id, ctx
             ):
-                q = structured_action.parameters.get("query") or user_text
-                is_deep = (
-                    structured_action.intent == CanonicalIntent.RESEARCH_TOPIC
-                    or structured_action.parameters.get("mode") == "agentic_search"
-                )
-                und_name = "Deep Web Research" if is_deep else "Live Web Research"
-                DashboardStatsManager.record_understood(
-                    und_name,
-                    details={
-                        "Query": q,
-                        "Mode": "agentic_search" if is_deep else "search",
-                        "Subsystem": "Anakin Live Web Intelligence",
-                    },
-                )
-
-                # Capability Check
-                health = self.anakin_service.health_check()
-                if not health.is_available:
-                    fail_msg = f"Live web research through Anakin is unavailable: {health.details}"
-                    DashboardStatsManager.record_action("Anakin research skipped (unavailable)")
-                    DashboardStatsManager.record_verify(health.details, success=False)
-                    DashboardStatsManager.record_result(fail_msg, success=False)
-                    self._deliver_response(fail_msg, turn_id)
-                    return
-
-                act_msg = (
-                    f"Anakin deep research started for '{q}'"
-                    if is_deep
-                    else f"Anakin web research started for '{q}'"
-                )
-                DashboardStatsManager.record_action(act_msg)
-
-                try:
-                    start_t = time.monotonic()
-                    if is_deep:
-                        res = self.anakin_service.agentic_research(query=q)
-                        sources_list = [s.to_dict() for s in res.sources]
-                        summary_text = res.summary
-                        sc_count = res.source_count
-                        ret_sources = res.sources
-                    else:
-                        res = self.anakin_service.search(query=q, limit=5)
-                        sources_list = [s.to_dict() for s in res.sources]
-                        summary_text = ""
-                        sc_count = res.source_count
-                        ret_sources = res.sources
-
-                    # Record to short-term task context for multi-turn follow-ups
-                    self.recent_context.record_web_research(
-                        query=q,
-                        sources=sources_list,
-                        summary=summary_text,
-                        mode="agentic_search" if is_deep else "search",
-                    )
-
-                    DashboardStatsManager.record_action(f"Anakin returned {sc_count} sources")
-                    DashboardStatsManager.record_verify("Live web research successful", success=True)
-                    DashboardStatsManager.record_result(f"Found {sc_count} sources", success=True)
-
-                    # Synthesize with existing LLM provider or direct fallback
-                    spoken = self._synthesize_web_research_response(
-                        query=q,
-                        sources=ret_sources,
-                        summary=summary_text,
-                        is_deep=is_deep,
-                    )
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                except Exception as exc:
-                    logger.error("Anakin research failed for '%s': %s", q, exc, exc_info=True)
-                    DashboardStatsManager.record_action("Anakin research failed")
-                    DashboardStatsManager.record_verify(f"Failure: {exc}", success=False)
-                    DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
-                    self._deliver_response(f"I couldn't complete web research because: {exc}", turn_id)
-                    return
-
-            # 3C-3. Open Web Research Result into Native Browser
-            if structured_action.intent == CanonicalIntent.OPEN_RESULT:
-                idx = structured_action.parameters.get("target_index", 1)
-                resolved = self.recent_context.resolve_reference(f"the {idx} result")
-                target_url = None
-                target_title = None
-                if resolved.resolved and resolved.target_type == "search_result" and isinstance(resolved.target_value, dict):
-                    target_url = resolved.target_value.get("url")
-                    target_title = resolved.target_value.get("title")
-                elif self.recent_context.last_search_results and 1 <= idx <= len(self.recent_context.last_search_results):
-                    item = self.recent_context.last_search_results[idx - 1]
-                    target_url = item.get("url")
-                    target_title = item.get("title")
-
-                if target_url:
-                    DashboardStatsManager.record_understood("Open Search Result", details={"Index": idx, "URL": target_url})
-                    DashboardStatsManager.record_action(f"Opening {target_title or target_url} in browser")
-                    self.browser_manager.execute_command(f"open {target_url}")
-                    DashboardStatsManager.record_verify(f"Opened result #{idx}", success=True)
-                    DashboardStatsManager.record_result(f"Opened {target_title or 'result'}", success=True)
-                    spoken = f"Opening {target_title or 'the result'} in your browser, Boss."
-                    self._deliver_response(spoken, turn_id)
-                    return
-                else:
-                    self._deliver_response(f"I couldn't find result number {idx} from the recent research.", turn_id)
-                    return
-
-            # 3D. Autonomous Multi-Step Task Agent Dispatch
-            if routing_domain == RoutingDomain.TASK_AGENT or structured_action.intent == CanonicalIntent.AUTONOMOUS_TASK:
-                self.task_planner.provider_mgr = self.provider_manager
-                plan = self.task_planner.plan_goal(user_text)
-                task_res = self.task_executor.execute_plan(plan, context=self.active_task_context)
-                self._deliver_response(task_res.spoken_response, turn_id)
                 return
 
-            # 3E. Delete Item Safety Confirmation
-            if structured_action.intent == CanonicalIntent.DELETE_ITEM:
-                res = ContextResolver.resolve_target("this", ctx, target_type="any")
-                if res["resolved"] and isinstance(res["target"], Path):
-                    target_p = res["target"]
-                    ctx.pending_confirmation = {
-                        "action": "DELETE_ITEM",
-                        "target_path": str(target_p),
-                    }
-                    spoken = f"Do you want me to delete {target_p.name}?"
-                    self._deliver_response(spoken, turn_id)
-                    return
-                else:
-                    spoken = "I couldn't identify which file or folder you want to delete. Please select an item first."
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-            # 3F. Reminder Request Clarification
-            if structured_action.intent == CanonicalIntent.REMINDER_REQUEST:
-                time_str = structured_action.parameters.get("time_str", "that time")
-                ctx.pending_confirmation = {
-                    "action": "REMINDER_REQUEST",
-                    "time_str": time_str,
-                    "original_request": user_text,
-                }
-                prompt = structured_action.clarification_prompt or f"Do you want me to remind you at {time_str}?"
-                self._deliver_response(prompt, turn_id)
+            if self._handle_media_intents(structured_action, user_text, turn_id):
                 return
-            # 3G. Dedicated Media & YouTube Shorts Dispatch (First-Class Action Intents)
-            if structured_action.intent in (
-                CanonicalIntent.PLAY_MEDIA,
-                CanonicalIntent.LISTEN_TO_MUSIC,
-                CanonicalIntent.PLAY_SPECIFIC_SONG,
-                CanonicalIntent.PLAY_ARTIST,
-                CanonicalIntent.PLAY_GENRE,
-                CanonicalIntent.PLAY_MOOD,
-                CanonicalIntent.SEARCH_MUSIC,
+
+            # 5. Domain-Aware Subsystem Dispatch
+            if self._handle_browser_actions(
+                structured_action, routing_domain, user_text, norm_text, turn_id
             ):
-                intent_label = {
-                    CanonicalIntent.LISTEN_TO_MUSIC: "Listen to Music",
-                    CanonicalIntent.PLAY_ARTIST: "Play Artist",
-                    CanonicalIntent.PLAY_GENRE: "Play Genre",
-                    CanonicalIntent.PLAY_MOOD: "Play Mood",
-                    CanonicalIntent.PLAY_SPECIFIC_SONG: "Play Song",
-                    CanonicalIntent.SEARCH_MUSIC: "Search Music",
-                }.get(structured_action.intent, "Play Media")
-                DashboardStatsManager.record_understood(intent_label, details=structured_action.parameters)
-                query = structured_action.parameters.get("query", "")
-                pref_info = self.recent_context.music_context.preference.to_search_query() if self.recent_context.music_context.active else "music"
-                action_desc = f"Playing '{query}' on YouTube" if query else f"Playing {pref_info} on YouTube"
-                DashboardStatsManager.record_action(action_desc)
-                from intent.router import structured_action_to_browser_plan
-                plan = structured_action_to_browser_plan(structured_action)
-                if plan:
-                    res = self.browser_manager.execute_plan(plan)
-                else:
-                    res = self.browser_manager.execute_command(user_text)
-                from personality.response_orchestrator import ResponseOrchestrator
-                orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
-                DashboardStatsManager.record_result(f"✓ {res.message}" if res and res.success else "✗ Playback unconfirmed", success=bool(res and res.success))
-                self._deliver_orchestrated_response(orch, turn_id)
                 return
 
-            if structured_action.intent == CanonicalIntent.WATCH_SHORTS:
-                DashboardStatsManager.record_understood("Watch Shorts", details=structured_action.parameters)
-                DashboardStatsManager.record_action("Opening YouTube Shorts")
-                from intent.router import structured_action_to_browser_plan
-                plan = structured_action_to_browser_plan(structured_action)
-                if plan:
-                    res = self.browser_manager.execute_plan(plan)
-                else:
-                    res = self.browser_manager.execute_command(user_text)
-
-                if res and res.success:
-                    self.recent_context.update_browser_state(
-                        browser_name="Google Chrome",
-                        url=getattr(res, "url", "https://www.youtube.com/shorts"),
-                        title="YouTube Shorts",
-                    )
-                    self.recent_context.is_shorts_active = True
-                    self.recent_context.add_turn(
-                        user_input=user_text,
-                        intent=CanonicalIntent.WATCH_SHORTS.value,
-                        action="watch_shorts",
-                        action_result=res.message,
-                        success=True,
-                        target_app="Google Chrome",
-                        target_browser="Google Chrome",
-                        current_url=getattr(res, "url", "https://www.youtube.com/shorts"),
-                        current_title="YouTube Shorts",
-                    )
-                from personality.response_orchestrator import ResponseOrchestrator
-                orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
-                DashboardStatsManager.record_result("✓ YouTube Shorts opened" if res and res.success else "✗ Failed to open Shorts", success=bool(res and res.success))
-                self._deliver_orchestrated_response(orch, turn_id)
+            if self._handle_desktop_actions(
+                structured_action, routing_domain, user_text, norm_text, turn_id
+            ):
                 return
 
-            # 4. Domain-Aware Subsystem Dispatch
-            if routing_domain == RoutingDomain.BROWSER:
-                from intent.router import structured_action_to_browser_plan
-                plan = structured_action_to_browser_plan(structured_action)
-                if plan:
-                    res = self.browser_manager.execute_plan(plan)
-                else:
-                    res = self.browser_manager.execute_command(norm_text) or self.browser_manager.execute_command(user_text)
-
-                if res is not None:
-                    # Update recent interaction context with verified outcome
-                    res_meta = getattr(res, "metadata", {}) or {}
-                    res_url = getattr(res, "url", None) or res_meta.get("url")
-                    res_title = res_meta.get("title")
-                    res_msg = getattr(res, "message", "executed")
-                    res_success = getattr(res, "success", True)
-                    if structured_action.intent in (
-                        CanonicalIntent.START_AUTO_SHORTS,
-                        CanonicalIntent.STOP_AUTO_SHORTS,
-                        CanonicalIntent.PAUSE_AUTO_SHORTS,
-                        CanonicalIntent.RESUME_AUTO_SHORTS,
-                    ):
-                        self.recent_context.is_shorts_active = True
-                        self.recent_context.is_auto_scroll_active = (
-                            structured_action.intent in (CanonicalIntent.START_AUTO_SHORTS, CanonicalIntent.RESUME_AUTO_SHORTS)
-                            and res_success
-                        )
-                    self.recent_context.add_turn(
-                        user_input=user_text,
-                        intent=structured_action.intent.value,
-                        action=plan.action.value if plan else "browser_action",
-                        action_result=res_msg,
-                        success=res_success,
-                        target_app="Google Chrome",
-                        target_browser="Google Chrome",
-                        current_url=res_url or self.recent_context.current_url,
-                        current_title=res_title or self.recent_context.current_page_title,
-                    )
-                    from personality.response_orchestrator import ResponseOrchestrator
-                    orch = ResponseOrchestrator.format_action_response(structured_action, res, user_text)
-                    self._deliver_orchestrated_response(orch, turn_id)
-                    return
-                # Scrolling fallback if browser command did not handle directly
-                if structured_action.intent in (CanonicalIntent.SCROLL_DOWN, CanonicalIntent.SCROLL_UP, CanonicalIntent.SCROLL_TO_TOP, CanonicalIntent.SCROLL_TO_BOTTOM):
-                    from browser.engine import MacOSNativeBrowserEngine
-                    eng = MacOSNativeBrowserEngine()
-                    if structured_action.intent == CanonicalIntent.SCROLL_TO_BOTTOM:
-                        eng.scroll_to_bottom()
-                        self._deliver_response("Scrolled to the bottom, Boss.", turn_id)
-                    elif structured_action.intent == CanonicalIntent.SCROLL_TO_TOP:
-                        eng.scroll_to_top()
-                        self._deliver_response("Scrolled to the top, Boss.", turn_id)
-                    elif structured_action.intent == CanonicalIntent.SCROLL_UP:
-                        eng.scroll_page(direction="up")
-                        self._deliver_response("Scrolled up, Boss.", turn_id)
-                    else:
-                        eng.scroll_page(direction="down")
-                        self._deliver_response("Scrolled down, Boss.", turn_id)
-                    return
-
-            if routing_domain == RoutingDomain.DESKTOP_APP:
-                if structured_action.intent == CanonicalIntent.OPEN_CAMERA:
-                    DashboardStatsManager.record_understood("Open Camera", details={"Target": "Camera"})
-                    DashboardStatsManager.record_action("Opening Camera")
-                    res = self.desktop_manager.camera_mgr.open_camera()
-                    DashboardStatsManager.record_result("✓ Camera opened" if res.success else f"✗ Failed: {res.message}", success=res.success)
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-                if structured_action.intent == CanonicalIntent.TAKE_PHOTO:
-                    DashboardStatsManager.record_understood("Take Photo", details={"Target": "Camera"})
-                    DashboardStatsManager.record_action("Capturing photo")
-                    res = self.desktop_manager.camera_mgr.capture_photo()
-                    DashboardStatsManager.record_result("✓ Photo captured" if res.success else f"✗ Failed: {res.message}", success=res.success)
-                    self._deliver_response(res.spoken_response, turn_id)
-                    return
-                if structured_action.intent == CanonicalIntent.LAUNCH_APP:
-                    app_name = structured_action.parameters.get("app_name", "")
-                    DashboardStatsManager.record_understood("Open Application", details={"Target": app_name})
-                    DashboardStatsManager.record_action(f"Opening {app_name}")
-                    from desktop.apps import AppLauncher
-                    start_t = time.monotonic()
-                    success, msg, spoken = AppLauncher.launch(app_name)
-                    lat_ms = (time.monotonic() - start_t) * 1000
-                    if success:
-                        DashboardStatsManager.record_verify(f"{app_name} opened and active", success=True)
-                        DashboardStatsManager.record_result(f"{app_name} launched successfully.", success=True)
-                        self.recent_context.add_turn(
-                            user_input=user_text,
-                            intent="launch_app",
-                            action="open_application",
-                            action_result=f"Opened {app_name}",
-                            success=True,
-                            target_app=app_name,
-                        )
-                        if "chrome" in app_name.lower():
-                            self.recent_context.update_browser_state(browser_name="Google Chrome", app_name="Google Chrome")
-                        elif "safari" in app_name.lower():
-                            self.recent_context.update_browser_state(browser_name="Safari", app_name="Safari")
-                        try:
-                            if hasattr(self, "active_task_context") and self.active_task_context:
-                                if hasattr(self.active_task_context, "register_application"):
-                                    self.active_task_context.register_application(app_name)
-                                elif hasattr(self.active_task_context, "register_app"):
-                                    self.active_task_context.register_app(app_name)
-                        except Exception as bookkeeping_err:
-                            logger.warning("Failed post-launch bookkeeping for %s: %s", app_name, bookkeeping_err)
-                    else:
-                        DashboardStatsManager.record_result(f"Failed to open {app_name}: {msg}", success=False)
-                    DashboardStatsManager.record_mac_action(
-                        command_text=user_text,
-                        intent="application.open",
-                        target=app_name,
-                        status="SUCCESS" if success else "FAILED",
-                        latency_ms=lat_ms,
-                        result_message=spoken,
-                    )
-                    self._deliver_response(spoken, turn_id)
-                    return
-                if structured_action.intent == CanonicalIntent.CLOSE_APP:
-                    app_name = structured_action.parameters.get("app_name", "")
-                    DashboardStatsManager.record_understood("Close Application", details={"Target": app_name})
-                    DashboardStatsManager.record_action(f"Closing {app_name}")
-                    from desktop.apps import AppLauncher
-                    start_t = time.monotonic()
-                    success, msg, spoken = AppLauncher.close(app_name)
-                    lat_ms = (time.monotonic() - start_t) * 1000
-                    if success:
-                        DashboardStatsManager.record_result(f"✓ {app_name} closed", success=True)
-                        self.recent_context.add_turn(
-                            user_input=user_text,
-                            intent="close_app",
-                            action="close_application",
-                            action_result=f"Closed {app_name}",
-                            success=True,
-                            target_app=None,
-                        )
-                    else:
-                        DashboardStatsManager.record_result(f"✗ Failed to close {app_name}: {msg}", success=False)
-                    DashboardStatsManager.record_mac_action(
-                        command_text=user_text,
-                        intent="application.close",
-                        target=app_name,
-                        status="SUCCESS" if success else "FAILED",
-                        latency_ms=lat_ms,
-                        result_message=spoken,
-                    )
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-            if routing_domain in (RoutingDomain.FILESYSTEM, RoutingDomain.DOCUMENT_WRITING, RoutingDomain.DESKTOP_APP):
-                if structured_action.intent == CanonicalIntent.GENERATE_AND_WRITE_DOCUMENT or routing_domain == RoutingDomain.DOCUMENT_WRITING:
-                    from desktop.editor import DocumentEditor
-                    topic = structured_action.parameters.get("topic") or structured_action.parameters.get("content") or user_text
-                    fname = structured_action.parameters.get("filename", "document.txt")
-                    dest = structured_action.parameters.get("destination", "Notepad")
-                    DashboardStatsManager.record_understood(
-                        "WRITE",
-                        details={
-                            "Destination": dest,
-                            "Content": f'"{topic}"',
-                            "Confidence": f"{int(structured_action.confidence * 100)}%",
-                        },
-                    )
-                    DashboardStatsManager.record_action(f"Writing content to {dest}")
-                    desktop_result = DocumentEditor.write_and_open_document(
-                        topic=topic,
-                        filename=fname,
-                        destination=dest,
-                    )
-                    if desktop_result.success:
-                        DashboardStatsManager.record_verify(f"{dest} content written successfully", success=True)
-                        DashboardStatsManager.record_result(f"✓ Written to {dest}", success=True)
-                    else:
-                        DashboardStatsManager.record_verify(f"Failed to write to {dest}: {desktop_result.error}", success=False)
-                        DashboardStatsManager.record_result(f"✗ Write failed: {desktop_result.error}", success=False)
-                    self._deliver_response(desktop_result.spoken_response, turn_id)
-                    return
-
-                desktop_result = self.desktop_manager.process_input(norm_text) or self.desktop_manager.process_input(user_text)
-                if desktop_result is not None:
-                    if desktop_result.success and desktop_result.target_path:
-                        tp = Path(desktop_result.target_path)
-                        if tp.is_dir():
-                            self.active_task_context.register_folder(tp.name, tp)
-                        elif tp.is_file():
-                            self.active_task_context.register_file(tp.name, tp)
-                    self._deliver_response(desktop_result.spoken_response, turn_id)
-                    return
-
-            if routing_domain == RoutingDomain.SYSTEM:
-                if structured_action.intent == CanonicalIntent.GET_CLIPBOARD:
-                    try:
-                        from mac_control.actions.clipboard import get_clipboard
-                        clip_text = get_clipboard()
-                        spoken = f"Your clipboard contains: {clip_text[:120]}" if clip_text else "Your clipboard is currently empty."
-                    except Exception:
-                        spoken = "I could not access the clipboard."
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.CLEAR_CLIPBOARD:
-                    try:
-                        from mac_control.actions.clipboard import clear_clipboard
-                        clear_clipboard()
-                        spoken = "Clipboard cleared, Boss."
-                    except Exception:
-                        spoken = "Failed to clear clipboard."
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.SET_CLIPBOARD:
-                    try:
-                        from mac_control.actions.clipboard import set_clipboard
-                        text_to_set = structured_action.parameters.get("text", "")
-                        if structured_action.parameters.get("use_context"):
-                            if ctx.current_url:
-                                text_to_set = ctx.current_url
-                            elif ctx.last_created_path:
-                                text_to_set = str(ctx.last_created_path)
-                        set_clipboard(text_to_set)
-                        spoken = "Copied to clipboard, Boss."
-                    except Exception:
-                        spoken = "Failed to set clipboard."
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.CONTROL_WIFI:
-                    act = structured_action.parameters.get("action", "status")
-                    und_name = "Wi-Fi Control" if act in ("on", "off") else ("Get Wi-Fi Network" if act == "ssid" else ("Get Network Details" if act == "details" else "Get Wi-Fi Status"))
-                    act_desc = "Turning Wi-Fi on" if act == "on" else ("Turning Wi-Fi off" if act == "off" else ("Checking Wi-Fi network" if act == "ssid" else ("Checking network details" if act == "details" else "Checking Wi-Fi status")))
-                    DashboardStatsManager.record_understood(und_name, details={"Intent": "network.wifi", "Action": act, "Target": "Wi-Fi"})
-                    DashboardStatsManager.record_action(act_desc)
-                    try:
-                        from mac_control.actions.wifi import execute_wifi_command
-                        from mac_control.models import MacCommand, CommandCategory
-                        cmd = MacCommand(category=CommandCategory.NETWORK, action=act, raw_input=user_text)
-                        res = execute_wifi_command(cmd)
-                        spoken = res.message
-                        is_succ = (res.status.value == "SUCCESS")
-                        DashboardStatsManager.record_verify(f"Wi-Fi verified: {spoken}", success=is_succ)
-                        DashboardStatsManager.record_result(spoken, success=is_succ)
-                        DashboardStatsManager.record_mac_action(
-                            command_text=user_text,
-                            intent="network.wifi",
-                            target="Wi-Fi",
-                            status="SUCCESS" if is_succ else "FAILED",
-                            latency_ms=res.execution_time_ms,
-                            result_message=spoken,
-                        )
-                    except Exception as exc:
-                        logger.error("Wi-Fi control error: %s", exc, exc_info=True)
-                        spoken = f"Boss, I couldn't control Wi-Fi because: {exc}"
-                        DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
-                        DashboardStatsManager.record_mac_action(
-                            command_text=user_text,
-                            intent="network.wifi",
-                            target="Wi-Fi",
-                            status="FAILED",
-                            result_message=str(exc),
-                        )
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.CONTROL_BLUETOOTH:
-                    act = structured_action.parameters.get("action", "status")
-                    und_name = "Bluetooth Control" if act in ("on", "off") else ("Get Bluetooth Devices" if act in ("devices", "connected", "which", "list") else "Get Bluetooth Status")
-                    act_desc = "Turning Bluetooth on" if act == "on" else ("Turning Bluetooth off" if act == "off" else ("Checking connected Bluetooth devices" if act in ("devices", "connected", "which", "list") else "Checking Bluetooth status"))
-                    DashboardStatsManager.record_understood(und_name, details={"Intent": "network.bluetooth", "Action": act, "Target": "Bluetooth"})
-                    DashboardStatsManager.record_action(act_desc)
-                    try:
-                        from mac_control.actions.bluetooth import execute_bluetooth_command
-                        from mac_control.models import MacCommand, CommandCategory
-                        cmd = MacCommand(category=CommandCategory.NETWORK, action=act, raw_input=user_text)
-                        res = execute_bluetooth_command(cmd)
-                        spoken = res.message
-                        is_succ = (res.status.value == "SUCCESS")
-                        DashboardStatsManager.record_verify(f"Bluetooth verified: {spoken}", success=is_succ)
-                        DashboardStatsManager.record_result(spoken, success=is_succ)
-                        DashboardStatsManager.record_mac_action(
-                            command_text=user_text,
-                            intent="network.bluetooth",
-                            target="Bluetooth",
-                            status="SUCCESS" if is_succ else "FAILED",
-                            latency_ms=res.execution_time_ms,
-                            result_message=spoken,
-                        )
-                    except Exception as exc:
-                        logger.error("Bluetooth control error: %s", exc, exc_info=True)
-                        spoken = f"Boss, I couldn't control Bluetooth because: {exc}"
-                        DashboardStatsManager.record_result(f"Failed: {exc}", success=False)
-                        DashboardStatsManager.record_mac_action(
-                            command_text=user_text,
-                            intent="network.bluetooth",
-                            target="Bluetooth",
-                            status="FAILED",
-                            result_message=str(exc),
-                        )
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.LOCK_SCREEN:
-                    try:
-                        from mac_control.actions.system import lock_screen
-                        lock_screen()
-                        spoken = "Screen locked, Boss."
-                    except Exception:
-                        spoken = "Failed to lock screen."
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.SYSTEM_SHUTDOWN:
-                    is_uncertain = (self._current_turn_source == "voice" and getattr(self, "_last_turn_quality", None) == QualityDecision.UNCERTAIN)
-                    if is_uncertain:
-                        ctx.pending_confirmation = {"action": "SHUTDOWN_REQUEST"}
-                        self._deliver_response("I heard 'shutdown'. Did you mean shut down NOVA?", turn_id)
-                        return
-                    self._execute_local_shutdown()
-                    return
-
-                if structured_action.intent == CanonicalIntent.CONTROL_BRIGHTNESS:
-                    from mac_control.actions.brightness import execute_brightness_command
-                    from mac_control.models import MacCommand, CommandCategory
-                    act = structured_action.parameters.get("action", "increase")
-                    val = structured_action.parameters.get("value")
-                    und_details = {"Target": "Mac display"}
-                    if val is not None:
-                        und_details["Value"] = f"{val}%"
-                    und_name = "Set Brightness" if act == "set" else ("Increase Brightness" if act == "increase" else ("Decrease Brightness" if act == "decrease" else "Get Brightness"))
-                    DashboardStatsManager.record_understood(und_name, details=und_details)
-                    act_desc = f"Setting brightness to {val}%" if act == "set" and val is not None else ("Increasing brightness" if act == "increase" else ("Decreasing brightness" if act == "decrease" else f"{act.title()}ing brightness"))
-                    DashboardStatsManager.record_action(act_desc)
-                    args = {k: v for k, v in structured_action.parameters.items() if k != "action"}
-                    cmd = MacCommand(
-                        category=CommandCategory.BRIGHTNESS,
-                        action=act,
-                        args=args,
-                        raw_input=user_text,
-                    )
-                    start_t = time.monotonic()
-                    res = execute_brightness_command(cmd)
-                    lat_ms = (time.monotonic() - start_t) * 1000
-                    is_succ = (res.status.value == "SUCCESS")
-                    if is_succ:
-                        actual_bright = res.details.get("actual_value", val) if res.details else val
-                        if val is None and act == "increase":
-                            res_msg = "Brightness increased successfully."
-                            spoken = "Done Boss. Brightness increased."
-                        elif val is None and act == "decrease":
-                            res_msg = "Brightness decreased successfully."
-                            spoken = "Done Boss. Brightness decreased."
-                        elif actual_bright is not None:
-                            res_msg = f"Brightness is now {actual_bright}%."
-                            spoken = f"Done Boss. Brightness is now {actual_bright}%."
-                        else:
-                            res_msg = f"{res.message} successfully." if not res.message.endswith("successfully.") else res.message
-                            spoken = f"Done Boss. {res.message}."
-                        DashboardStatsManager.record_verify(f"Actual screen brightness: {actual_bright}%" if actual_bright is not None else "Brightness adjusted", success=True)
-                        DashboardStatsManager.record_result(res_msg, success=True)
-                    else:
-                        DashboardStatsManager.record_verify(f"Brightness adjustment failed: {res.message}", success=False)
-                        DashboardStatsManager.record_result(f"Failed: {res.message}", success=False)
-                        spoken = f"Sorry Boss, I couldn't adjust the brightness: {res.message}"
-                    DashboardStatsManager.record_mac_action(
-                        command_text=user_text,
-                        intent=f"system.brightness.{act}",
-                        target="Brightness",
-                        status="SUCCESS" if is_succ else "FAILED",
-                        latency_ms=lat_ms,
-                        result_message=spoken,
-                    )
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-                if structured_action.intent == CanonicalIntent.CONTROL_VOLUME:
-                    from mac_control.actions.volume import execute_volume_command
-                    from mac_control.models import MacCommand, CommandCategory
-                    act = structured_action.parameters.get("action", "increase")
-                    val = structured_action.parameters.get("value")
-                    und_details = {"Target": "System audio"}
-                    if val is not None:
-                        und_details["Value"] = f"{val}%"
-                    und_name = "Set Volume" if act == "set" else ("Increase Volume" if act == "increase" else ("Decrease Volume" if act == "decrease" else ("Mute Audio" if act == "mute" else ("Unmute Audio" if act == "unmute" else "Get Volume"))))
-                    DashboardStatsManager.record_understood(und_name, details=und_details)
-                    act_desc = f"Setting volume to {val}%" if act == "set" and val is not None else ("Increasing volume" if act == "increase" else ("Decreasing volume" if act == "decrease" else ("Muting volume" if act == "mute" else ("Unmuting volume" if act == "unmute" else f"{act.title()}ing volume"))))
-                    DashboardStatsManager.record_action(act_desc)
-                    args = {k: v for k, v in structured_action.parameters.items() if k != "action"}
-                    cmd = MacCommand(
-                        category=CommandCategory.VOLUME,
-                        action=act,
-                        args=args,
-                        raw_input=user_text,
-                    )
-                    start_t = time.monotonic()
-                    res = execute_volume_command(cmd)
-                    lat_ms = (time.monotonic() - start_t) * 1000
-                    is_succ = (res.status.value == "SUCCESS")
-                    if is_succ:
-                        actual_vol = res.details.get("actual_value", val) if res.details else val
-                        if val is None and act == "increase":
-                            res_msg = "Volume increased successfully."
-                            spoken = "Done Boss. Volume increased."
-                        elif val is None and act == "decrease":
-                            res_msg = "Volume decreased successfully."
-                            spoken = "Done Boss. Volume decreased."
-                        elif act in ("mute", "unmute"):
-                            res_msg = f"{res.message} successfully." if not res.message.endswith("successfully.") else res.message
-                            spoken = f"Done Boss. {res.message}."
-                        elif actual_vol is not None:
-                            res_msg = f"Volume is now {actual_vol}%."
-                            spoken = f"Done Boss. Volume is now {actual_vol}%."
-                        else:
-                            res_msg = f"{res.message} successfully." if not res.message.endswith("successfully.") else res.message
-                            spoken = f"Done Boss. {res.message}."
-                        DashboardStatsManager.record_verify(f"Actual system volume: {actual_vol}%" if actual_vol is not None else "Volume adjusted", success=True)
-                        DashboardStatsManager.record_result(res_msg, success=True)
-                    else:
-                        DashboardStatsManager.record_verify(f"Volume adjustment failed: {res.message}", success=False)
-                        DashboardStatsManager.record_result(f"Failed: {res.message}", success=False)
-                        spoken = f"Sorry Boss, I couldn't adjust the volume: {res.message}"
-                    DashboardStatsManager.record_mac_action(
-                        command_text=user_text,
-                        intent=f"system.volume.{act}",
-                        target="Volume",
-                        status="SUCCESS" if is_succ else "FAILED",
-                        latency_ms=lat_ms,
-                        result_message=spoken,
-                    )
-                    self._deliver_response(spoken, turn_id)
-                    return
-
-            # Fallback checks across Desktop and Browser
-            desktop_result = self.desktop_manager.process_input(user_text)
-            if desktop_result is not None:
-                self._deliver_response(desktop_result.spoken_response, turn_id)
+            if self._handle_mac_control_actions(
+                structured_action, routing_domain, user_text, turn_id, ctx
+            ):
                 return
 
-            browser_result = self.browser_manager.execute_command(user_text)
-            if browser_result is not None:
-                self._deliver_response(browser_result.spoken_response, turn_id)
+            # 6. Fallback checks across Desktop and Browser
+            if self._handle_desktop_and_browser_fallback(user_text, turn_id):
                 return
 
-            # 3. Semantic Analysis & Context
-            if self.emotion_engine is None:
-                self.emotion_engine = EmotionEngine()
-            if self.system_prompt_manager is None:
-                self.system_prompt_manager = SystemPromptManager()
-            if self.provider_manager is None:
-                from providers.provider_manager import ProviderManager
-                self.provider_manager = ProviderManager()
-
-            DashboardStatsManager.record_understood("Conversational Query")
-            analysis: ConversationAnalysis = self.emotion_engine.analyze_text(user_text)
-            memory_summary = self._build_memory_summary(user_text)
-            task_type = self._map_mode_to_task_type(analysis.detected_mode)
-            profile_name = self._map_mode_to_profile(analysis.detected_mode)
-            active_provider = self._peek_active_provider(task_type)
-
-            self.event_bus.publish(NovaEvent.THINKING_STARTED, text=user_text)
-
-            screen_summary = None
-            try:
-                if hasattr(self, "computer_agent") and self.computer_agent and self.computer_agent.eyes:
-                    st = self.computer_agent.eyes.get_latest_state()
-                    if st:
-                        from personality.response_orchestrator import ResponseOrchestrator
-                        is_hi = ResponseOrchestrator.detect_is_hinglish(user_text)
-                        screen_summary = st.get_natural_screen_description(is_hinglish=is_hi)
-            except Exception:
-                pass
-
-            context = PromptBuildContext(
-                memory_summary=memory_summary,
-                current_project=self.activity.current_project,
-                current_task=self.activity.current_task,
-                emotion=analysis.emotion_description,
-                current_provider=active_provider,
-                voice_mode=(request.source == "voice"),
-                audio_event=request.audio_event,
-                screen_summary=screen_summary,
-            )
-
-            DashboardStatsManager.update("active_provider", active_provider or "Gemini")
-
-            # 4. LLM Response Generation
-            gen_start = time.monotonic()
-            response_text = self._generate_response(user_text, context, profile_name, task_type, turn_id)
-            gen_elapsed = time.monotonic() - gen_start
-            DashboardStatsManager.update("latency", f"{gen_elapsed:.2f}s")
-
-            if response_text is None:
-                DashboardStatsManager.record_error("No response generated from AI providers")
-                return
-
-            self.event_bus.publish(
-                NovaEvent.RESPONSE_GENERATED, text=response_text, provider=active_provider
-            )
-
-            # 5. Write to Durable Memory if needed
-            if self._should_remember(user_text, analysis):
-                self._write_memory(user_text, response_text, analysis)
-
-            # 6. Update Ephemeral History
-            self._conversation_history.append({"role": "user", "content": user_text})
-            self._conversation_history.append({"role": "assistant", "content": response_text})
-            self.activity.last_conversation_topic = user_text[:200]
-
-            # 7. Deliver Response (Console Output + Voice V2 Speaking)
-            self._deliver_response(response_text, turn_id)
-            DashboardStatsManager.record_result("Conversation completed", success=True)
+            # 7. Semantic Analysis & Conversational Turn
+            self._handle_conversation_turn(user_text, request, turn_id)
 
         except Exception as exc:
             logger.error("[turn-%s] Error processing turn: %s", turn_id, exc, exc_info=True)
@@ -1731,55 +1860,32 @@ class NovaApplication:
         if self.voice_available:
             self.voice_manager.speak(clean_spk)
 
-    def _synthesize_web_research_response(
-        self,
-        query: str,
-        sources: list[WebSource],
-        summary: str = "",
-        is_deep: bool = False,
+    def _build_research_prompt(
+        self, query: str, sources: list[WebSource], summary: str
+    ) -> tuple[str, str]:
+        """Construct system and research prompt content for web research synthesis."""
+        system_prompt = (
+            "You are NOVA, an intelligent personal voice assistant. "
+            "You have just retrieved verified live web research. "
+            "Answer the user's question directly, concisely, and truthfully using the provided sources. "
+            "Cite or attribute information naturally to the sources where helpful. "
+            "Do NOT mention internal API keys, internal mechanics, or that you used 'Anakin API'. "
+            "Speak naturally as NOVA ('I checked current web sources...')."
+        )
+        research_content = f"User Question: {query}\n\n"
+        if summary:
+            research_content += f"Research Findings Summary:\n{summary}\n\n"
+        if sources:
+            research_content += "Current Web Sources:\n"
+            for s in sources[:5]:
+                snippet_str = f" - {s.snippet}" if s.snippet else ""
+                research_content += f"[{s.index}] {s.title} ({s.url}){snippet_str}\n"
+        return system_prompt, research_content
+
+    def _format_direct_research_fallback(
+        self, query: str, sources: list[WebSource], summary: str
     ) -> str:
-        """Synthesize natural NOVA response combining live intelligence sources and LLM reasoning."""
-        if not sources and not summary:
-            return f"I checked current web sources for '{query}', but didn't find any relevant results."
-
-        # Ensure ProviderManager is initialized
-        if self.provider_manager is None:
-            try:
-                from providers.provider_manager import ProviderManager
-                self.provider_manager = ProviderManager()
-            except Exception as exc:
-                logger.warning("Could not initialize ProviderManager: %s", exc)
-
-        if self.provider_manager:
-            try:
-                system_prompt = (
-                    "You are NOVA, an intelligent personal voice assistant. "
-                    "You have just retrieved verified live web research. "
-                    "Answer the user's question directly, concisely, and truthfully using the provided sources. "
-                    "Cite or attribute information naturally to the sources where helpful. "
-                    "Do NOT mention internal API keys, internal mechanics, or that you used 'Anakin API'. "
-                    "Speak naturally as NOVA ('I checked current web sources...')."
-                )
-                research_content = f"User Question: {query}\n\n"
-                if summary:
-                    research_content += f"Research Findings Summary:\n{summary}\n\n"
-                if sources:
-                    research_content += "Current Web Sources:\n"
-                    for s in sources[:5]:
-                        snippet_str = f" - {s.snippet}" if s.snippet else ""
-                        research_content += f"[{s.index}] {s.title} ({s.url}){snippet_str}\n"
-
-                res = self.provider_manager.generate_response(
-                    prompt=research_content,
-                    system_prompt=system_prompt,
-                    task_type="general",
-                )
-                if res and res.strip():
-                    return res.strip()
-            except Exception as exc:
-                logger.warning("LLM reasoning for research failed (%s), falling back to direct summary", exc)
-
-        # Direct fallback synthesis if LLM provider fails or is unavailable
+        """Format a direct text summary when an LLM provider is unavailable."""
         if summary:
             resp = f"I checked current web sources: {summary}"
             if sources:
@@ -1793,6 +1899,42 @@ class NovaApplication:
             if s.snippet:
                 resp += f"\n  {s.snippet[:120]}..."
         return resp
+
+    def _synthesize_web_research_response(
+        self,
+        query: str,
+        sources: list[WebSource],
+        summary: str = "",
+        is_deep: bool = False,
+    ) -> str:
+        """Synthesize natural NOVA response combining live intelligence sources and LLM reasoning."""
+        if not sources and not summary:
+            return f"I checked current web sources for '{query}', but didn't find any relevant results."
+
+        if self.provider_manager is None:
+            try:
+                from providers.provider_manager import ProviderManager
+                self.provider_manager = ProviderManager()
+            except Exception as exc:
+                logger.warning("Could not initialize ProviderManager: %s", exc)
+
+        if self.provider_manager:
+            try:
+                sys_prompt, prompt_content = self._build_research_prompt(query, sources, summary)
+                res = self.provider_manager.generate_response(
+                    prompt=prompt_content,
+                    system_prompt=sys_prompt,
+                    task_type="general",
+                )
+                if res and res.strip():
+                    return res.strip()
+            except Exception as exc:
+                logger.warning(
+                    "LLM reasoning for research failed (%s), falling back to direct summary",
+                    exc,
+                )
+
+        return self._format_direct_research_fallback(query, sources, summary)
 
     def _peek_active_provider(self, task_type: TaskType) -> str | None:
         if self.provider_manager is None:
@@ -1932,7 +2074,7 @@ class NovaApplication:
         print("🟢 Shutdown command confirmed.")
         print("💾 Saving memory...")
 
-        session_length = datetime.now(timezone.utc) - self.activity.session_start_time
+        session_length = datetime.now(UTC) - self.activity.session_start_time
         summary = (
             f"project={self.activity.current_project or 'none'}; "
             f"topic={self.activity.last_conversation_topic or 'none'}; "
@@ -1996,18 +2138,8 @@ class NovaApplication:
         logger.info("Local cancellation executed.")
         self._deliver_response("Stopped active tasks, Boss.", getattr(self, "_current_turn_id", "local_cancel"))
 
-    def _shutdown(self) -> None:
-        """Tear down all subsystems gracefully."""
-        if self._is_already_shutting_down:
-            return
-        self._is_already_shutting_down = True
-        logger.info("NOVA shutdown initiated.")
-
-        try:
-            self.event_bus.publish(NovaEvent.APPLICATION_SHUTDOWN)
-        except Exception:
-            pass
-
+    def _shutdown_subsystems(self) -> None:
+        """Tear down individual subsystem instances."""
         if self.voice_available:
             try:
                 self.voice_manager.shutdown()
@@ -2041,6 +2173,20 @@ class NovaApplication:
                 self.memory_manager.shutdown()
             except Exception as exc:
                 logger.error("Error shutting down MemoryManager: %s", exc)
+
+    def _shutdown(self) -> None:
+        """Tear down all subsystems gracefully."""
+        if self._is_already_shutting_down:
+            return
+        self._is_already_shutting_down = True
+        logger.info("NOVA shutdown initiated.")
+
+        try:
+            self.event_bus.publish(NovaEvent.APPLICATION_SHUTDOWN)
+        except Exception:
+            pass
+
+        self._shutdown_subsystems()
 
         try:
             lifecycle.shutdown()

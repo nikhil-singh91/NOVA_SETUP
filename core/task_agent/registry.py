@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +159,7 @@ class CapabilityRegistry:
         # 2B. Filesystem: Open Folder in Finder
         def _exec_open_folder(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
             import subprocess
+
             from desktop.files import FileSystemManager
             name = params.get("name")
             target_path = params.get("path")
@@ -497,7 +498,7 @@ class CapabilityRegistry:
 
         # 17. System: Wi-Fi Control
         def _exec_wifi(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
-            from mac_control.actions.wifi import set_wifi_power, get_wifi_status
+            from mac_control.actions.wifi import get_wifi_status, set_wifi_power
             action = params.get("action", "status")
             if action == "on":
                 success = set_wifi_power(True)
@@ -521,7 +522,7 @@ class CapabilityRegistry:
 
         # 18. System: Bluetooth Control
         def _exec_bluetooth(params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
-            from mac_control.actions.bluetooth import set_bluetooth_power, get_bluetooth_status
+            from mac_control.actions.bluetooth import get_bluetooth_status, set_bluetooth_power
             action = params.get("action", "status")
             if action == "on":
                 success = set_bluetooth_power(True)

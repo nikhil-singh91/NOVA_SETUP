@@ -37,11 +37,11 @@ import math
 import re
 import threading
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Any, Final, Literal, Mapping, Sequence
-
+from typing import Any, Final, Literal
 
 from core.exceptions import MemorySystemError as MemoryError
 from core.logger import get_logger
@@ -349,7 +349,7 @@ class VectorStore:
             if resolved_id in self._documents:
                 raise MemoryError(f"A document already exists with id '{resolved_id}'.")
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             document = VectorDocument(
                 id=resolved_id,
                 text=normalized_text,
@@ -427,7 +427,7 @@ class VectorStore:
                 tags=new_tags,
                 metadata=new_metadata,
                 created_at=existing_document.created_at,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
 
             self._deindex_document(existing_document)

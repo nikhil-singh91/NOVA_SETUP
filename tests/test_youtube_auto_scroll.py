@@ -7,11 +7,10 @@ foreground app validation, recovery on failure, single-session safety, and clean
 
 from __future__ import annotations
 
-import threading
 import time
 from typing import Any
-import pytest
 
+import pytest
 from browser.auto_scroll import (
     AutoScrollController,
     AutoScrollObservation,
@@ -20,16 +19,14 @@ from browser.auto_scroll import (
     AutoScrollVerifier,
 )
 from browser.engine import BaseBrowserEngine
-from browser.manager import BrowserManager
-from browser.models import ActionType, BrowserActionPlan, BrowserResult, PageContent, Platform
+from browser.models import ActionType, BrowserActionPlan, PageContent, Platform
 from browser.parser import BrowserIntentParser
 from browser.sessions import BrowserSessionManager
 from browser.sites.youtube import YouTubeSkill
 from core.context import RecentInteractionContext
 from intent.engine import NaturalLanguageIntentEngine
-from intent.models import CanonicalIntent, StructuredAction
+from intent.models import CanonicalIntent
 from intent.router import RoutingDomain, get_routing_domain, structured_action_to_browser_plan
-
 
 # ==============================================================================
 # MOCK BROWSER ENGINE WITH DYNAMIC SHORTS FEED EMULATION

@@ -7,11 +7,10 @@ import re
 import ssl
 import urllib.parse
 import urllib.request
-from typing import Any
 
 import certifi
-
 from core.logger import get_logger
+
 from media.models import VideoCandidate
 
 logger = get_logger(__name__)

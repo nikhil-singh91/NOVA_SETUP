@@ -2,6 +2,7 @@
 
 from core.exceptions import NovaError
 
+
 class MacControlError(NovaError):
     """Base exception for all macOS control operations."""
     default_message = "An error occurred in the macOS Control subsystem."

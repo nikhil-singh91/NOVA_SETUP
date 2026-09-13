@@ -160,8 +160,8 @@ class ResponseOrchestrator:
                 return OrchestratedResponse(disp, spk, action.intent, success=False, metadata=metadata)
             else:
                 if is_hi:
-                    disp = f"YouTube search to open ho gaya, par sahi video start hona confirm nahi hua."
-                    spk = f"YouTube search to open ho gaya, par sahi video start hona confirm nahi hua."
+                    disp = "YouTube search to open ho gaya, par sahi video start hona confirm nahi hua."
+                    spk = "YouTube search to open ho gaya, par sahi video start hona confirm nahi hua."
                 else:
                     disp = f"I opened YouTube search for {title}, but couldn't verify the video started."
                     spk = f"I opened YouTube search for {title}, but couldn't verify the video started."

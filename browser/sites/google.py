@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import time
 import urllib.parse
 
 from core.logger import get_logger
+
 from browser.engine import BaseBrowserEngine
 from browser.models import ActionType, BrowserActionPlan, BrowserResult, Platform
 from browser.sessions import BrowserSessionManager

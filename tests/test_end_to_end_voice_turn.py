@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import queue
 import time
-import numpy as np
-import pytest
 
-from core.event_bus import EventBus, NovaEvent
-from main import ActivityState, NovaApplication, TurnRequest
+import numpy as np
+from core.event_bus import EventBus
+from main import NovaApplication, TurnRequest
 from memory.memory_manager import MemoryManager
 from personality.emotion_engine import EmotionEngine
 from personality.system_prompt import SystemPromptManager
-from providers.provider_manager import ProviderManager
-from voice import TranscriptionResult, VoiceManager, VoiceState
-from voice.microphone import MicrophoneManager
-from voice.speaker import SpeakerManager
+from voice import TranscriptionResult
 from voice.vad import VoiceActivityDetector
 
 

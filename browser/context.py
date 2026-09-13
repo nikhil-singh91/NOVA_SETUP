@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
 
 from core.logger import get_logger
+
 from browser.models import BrowserContext, BrowserTaskPlan, PageContent, SearchResultItem
 
 logger = get_logger(__name__)

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import time
-from typing import Any
 from core.logger import get_logger
-from mac_control.models import MacCommand, ExecutionResult, ExecutionStatus, CommandCategory
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 from mac_control.parser import CommandParser
 from mac_control.router import CommandRouter
 
@@ -33,12 +32,12 @@ class MacControlManager:
             return None
 
         cleaned_text = text.lower().strip()
-        
+
         # 1. Handle Awaiting Confirmation State
         if self.pending_command is not None:
             cmd = self.pending_command
             self.pending_command = None  # Clear state
-            
+
             # Match confirmation yes / no variations
             if cleaned_text in ("yes", "ha", "haan", "sure", "do it", "confirm", "sahi hai", "haan kar do"):
                 logger.info("Dangerous command confirmed: %s", cmd.action)
@@ -96,7 +95,7 @@ class MacControlManager:
         status = res.status
         action = res.command_name.lower()
         details = res.details
-        
+
         if status == ExecutionStatus.AWAITING_CONFIRMATION:
             return "Boss, are you sure?"
         if status == ExecutionStatus.CANCELLED:
@@ -118,7 +117,7 @@ class MacControlManager:
             elif "decrease" in action:
                 return f"Done Boss. Volume decreased to {vol} percent."
             return f"Done Boss. Volume set to {vol} percent."
-            
+
         elif "brightness" in action:
             bri = details.get("brightness", 50)
             if "increase" in action:
@@ -126,7 +125,7 @@ class MacControlManager:
             elif "decrease" in action:
                 return f"Done Boss. Brightness decreased to {bri} percent."
             return f"Done Boss. Brightness set to {bri} percent."
-            
+
         elif "application" in action:
             app = details.get("app_name", "Application")
             if "open" in action:
@@ -136,51 +135,51 @@ class MacControlManager:
             elif "force" in action:
                 return f"Done Boss. {app} was terminated."
             return f"Done Boss. {app} has been restarted."
-            
+
         elif "website" in action:
             return "Done Boss. Website opened."
-            
+
         elif "search" in action:
             q = details.get("query", "search")
             if "google" in action:
                 return f"Done Boss. Searched Google for {q}."
             return f"Done Boss. Searched YouTube for {q}."
-            
+
         elif "song" in action or "play" in action:
             song = details.get("song", "music")
             return f"Done Boss. Playing {song} on YouTube."
-            
+
         elif "media" in action:
             if "pause" in action:
                 return "Done Boss. Playback paused."
             elif "resume" in action:
                 return "Done Boss. Playback resumed."
             return "Done Boss. Track changed."
-            
+
         elif "folder" in action:
             fld = details.get("folder", "Finder")
             return f"Done Boss. {fld.title()} folder is open."
-            
+
         elif "screenshot" in action:
             if "folder" in action:
                 return "Done Boss. Screen shot folder is open."
             return "Done Boss. Screenshot captured."
-            
+
         elif "clipboard" in action:
             if "copy" in action:
                 return "Done Boss. Text copied."
             elif "paste" in action:
                 return "Done Boss. Text pasted."
             return "Done Boss. Clipboard cleared."
-            
+
         elif "wifi" in action:
             state = details.get("state", "changed")
             return f"Done Boss. WiFi has been turned {state}."
-            
+
         elif "bluetooth" in action:
             state = details.get("state", "changed")
             return f"Done Boss. Bluetooth has been turned {state}."
-            
+
         elif "sleep" in action:
             return "Done Boss. Sleep protocol initiated."
         elif "restart" in action:
@@ -191,7 +190,7 @@ class MacControlManager:
             return "Done Boss. Screen locked."
         elif "empty" in action:
             return "Done Boss. Trash emptied."
-            
+
         return f"Done Boss. {res.message}."
 
     def _print_terminal_card(self, res: ExecutionResult) -> None:
@@ -203,7 +202,7 @@ class MacControlManager:
         print(f"Category:\n{res.category.value}")
         print(f"Status:\n{res.status.value}")
         print(f"Result:\n{res.message}")
-        
+
         # Display current status detail conditionally
         if res.category == CommandCategory.VOLUME and "volume" in res.details:
             print(f"Current Volume:\n{res.details['volume']}%")
@@ -211,6 +210,6 @@ class MacControlManager:
             print(f"Current Brightness:\n{res.details['brightness']}%")
         elif res.category == CommandCategory.NETWORK and "ssid" in res.details and res.details["ssid"]:
             print(f"Network:\n{res.details['ssid']}")
-            
+
         print(f"Execution Time:\n{res.execution_time_ms} ms")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")

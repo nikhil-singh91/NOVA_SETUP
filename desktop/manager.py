@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import threading
 import time
@@ -12,6 +11,7 @@ from typing import Any
 from core.event_bus import NovaEvent
 from core.logger import get_logger
 from core.registry import registry
+
 from desktop.apps import AppLauncher
 from desktop.camera import CameraManager
 from desktop.code import CodeProjectManager
@@ -78,7 +78,7 @@ class DesktopActionManager:
 
     def _execute_single_action(self, safe_plan: DesktopActionPlan) -> DesktopResult:
         """Execute a single DesktopActionPlan with boundary checks and confirmation awareness."""
-        from core.environment import environment_observer, ContextResolver
+        from core.environment import ContextResolver, environment_observer
         from ui.health_checker import DashboardStatsManager
 
         # 1. OPEN APPLICATION
@@ -230,7 +230,7 @@ class DesktopActionManager:
                     target_path=str(target_folder_path),
                 )
             else:
-                spoken = f"Could not find the requested folder to open."
+                spoken = "Could not find the requested folder to open."
                 return DesktopResult(
                     success=False,
                     action_type=safe_plan.action_type,
@@ -312,7 +312,7 @@ class DesktopActionManager:
                     target_path=str(target_file_path),
                 )
             else:
-                spoken = f"Could not find the requested file to open."
+                spoken = "Could not find the requested file to open."
                 return DesktopResult(success=False, action_type=safe_plan.action_type, error=spoken, spoken_response=spoken)
 
         # 7. RENAME ITEM
@@ -355,7 +355,7 @@ class DesktopActionManager:
             # Interactive Confirmation Gate
             item_type = "folder" if target_path_to_delete.is_dir() else "file"
             spoken = f"I found the {item_type} {target_path_to_delete.name} on your {target_path_to_delete.parent.name}. Do you want me to move it to Trash?"
-            
+
             # Register pending confirmation state
             ctx = environment_observer.get_context()
             ctx.pending_confirmation = {

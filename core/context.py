@@ -13,7 +13,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +70,7 @@ class InteractionTurn:
     """Structured record of a single completed or active user interaction turn."""
 
     turn_id: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     user_text: str = ""
     intent: CanonicalIntent = CanonicalIntent.GENERAL_CONVERSATION
     domain: str = "conversation"
@@ -83,7 +83,7 @@ class InteractionTurn:
 
     @property
     def age_seconds(self) -> float:
-        return (datetime.now(timezone.utc) - self.timestamp).total_seconds()
+        return (datetime.now(UTC) - self.timestamp).total_seconds()
 
     @property
     def user_input(self) -> str:
@@ -131,7 +131,7 @@ class RecentInteractionContext:
         self.is_shorts_active: bool = False
         self.is_auto_scroll_active: bool = False
         self.music_context: ShortTermMusicContext = ShortTermMusicContext()
-        self.last_update_time: float = datetime.now(timezone.utc).timestamp()
+        self.last_update_time: float = datetime.now(UTC).timestamp()
 
     @property
     def is_current_page_shorts(self) -> bool:
@@ -251,7 +251,7 @@ class RecentInteractionContext:
                 self.current_tab = tab_info
                 if is_new_tab:
                     self.last_opened_tab = tab_info
-            self.last_update_time = datetime.now(timezone.utc).timestamp()
+            self.last_update_time = datetime.now(UTC).timestamp()
 
     def resolve_reference(
         self,
@@ -280,7 +280,7 @@ class RecentInteractionContext:
         with self._lock:
             turn = InteractionTurn(
                 turn_id=turn_id,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 user_text=user_text,
                 intent=intent,
                 domain=domain,
@@ -296,7 +296,7 @@ class RecentInteractionContext:
             self.last_action = action or intent.value
             self.last_action_target = target
             self.last_action_status = result_status
-            self.last_update_time = datetime.now(timezone.utc).timestamp()
+            self.last_update_time = datetime.now(UTC).timestamp()
 
             if resulting_state:
                 if "tab" in resulting_state:
@@ -353,7 +353,7 @@ class RecentInteractionContext:
                     "url": url if url is not None else cur.get("url", ""),
                     "browser": self.current_browser or cur.get("browser", "Google Chrome"),
                 }
-            self.last_update_time = datetime.now(timezone.utc).timestamp()
+            self.last_update_time = datetime.now(UTC).timestamp()
 
     def record_tab_opened(
         self,
@@ -371,7 +371,7 @@ class RecentInteractionContext:
                 "title": title,
                 "url": url,
                 "window": window,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             self.last_opened_tab = tab_info
             self.current_tab = tab_info
@@ -381,7 +381,7 @@ class RecentInteractionContext:
             self.current_page_title = title
             self.last_action = "OPEN_NEW_TAB"
             self.last_action_status = "VERIFIED"
-            self.last_update_time = datetime.now(timezone.utc).timestamp()
+            self.last_update_time = datetime.now(UTC).timestamp()
             logger.info("RecentInteractionContext: Recorded newly opened tab: %s", tab_info)
 
     def record_web_research(
@@ -403,7 +403,7 @@ class RecentInteractionContext:
             self.last_action = "LIVE_WEB_RESEARCH"
             self.last_action_target = query
             self.last_action_status = "VERIFIED"
-            self.last_update_time = datetime.now(timezone.utc).timestamp()
+            self.last_update_time = datetime.now(UTC).timestamp()
             logger.info(
                 "RecentInteractionContext: Recorded %d live web sources for '%s' (mode=%s)",
                 len(sources),
@@ -414,7 +414,7 @@ class RecentInteractionContext:
     def is_fresh(self, max_age_seconds: float = 120.0) -> bool:
         """Check whether recent action state is sufficiently fresh."""
         with self._lock:
-            elapsed = datetime.now(timezone.utc).timestamp() - self.last_update_time
+            elapsed = datetime.now(UTC).timestamp() - self.last_update_time
             return elapsed <= max_age_seconds
 
     def get_last_turn(self) -> InteractionTurn | None:

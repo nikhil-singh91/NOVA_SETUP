@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import sys
 import time
+
 from core.logger import get_logger, setup_logging
+
 from ui.backend.command_gateway import command_gateway
 from ui.backend.server import ui_server
 
@@ -18,6 +20,7 @@ def run_ui_backend() -> int:
 
     try:
         import threading
+
         from main import NovaApplication
         app = NovaApplication()
         command_gateway.bind_app(app)

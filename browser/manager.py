@@ -9,6 +9,10 @@ from config.settings import settings
 from core.event_bus import NovaEvent
 from core.logger import get_logger
 from core.registry import registry
+from intent.engine import NaturalLanguageIntentEngine
+from intent.models import CanonicalIntent, StructuredAction
+from intent.router import UniversalActionRouter, structured_action_to_browser_plan
+
 from browser.context import BrowserContextManager
 from browser.engine import BaseBrowserEngine, MacOSNativeBrowserEngine
 from browser.models import (
@@ -16,16 +20,12 @@ from browser.models import (
     BrowserActionCancelled,
     BrowserActionPlan,
     BrowserResult,
-    SensitiveActionBlockedError,
 )
 from browser.parser import BrowserIntentParser
 from browser.planner import BrowserTaskPlanner
 from browser.router import BrowserActionRouter
 from browser.safety import BrowserSafetyPolicy
 from browser.sessions import BrowserSessionManager
-from intent.engine import NaturalLanguageIntentEngine
-from intent.models import CanonicalIntent, StructuredAction
-from intent.router import UniversalActionRouter, structured_action_to_browser_plan
 
 logger = get_logger(__name__)
 
@@ -245,13 +245,17 @@ class BrowserManager:
     def stop_active_task(self) -> bool:
         """Interrupt and cancel any running background browser loop or active research."""
         self._stop_requested.set()
-        stopped_shorts = self.sessions.stop_active_task()
+        self.sessions.stop_active_task()
         self._publish_event(
             NovaEvent.BROWSER_ACTION_CANCELLED,
             action="stop_active_task",
             message="Active browser task cancelled.",
         )
         return True
+
+    def cancel_active_task(self) -> bool:
+        """Alias for stop_active_task for unified cancellation interface."""
+        return self.stop_active_task()
 
     def _publish_event(self, event: NovaEvent, **payload: Any) -> None:
         """Helper to publish events on canonical EventBus."""

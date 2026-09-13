@@ -8,25 +8,23 @@
 """
 
 import unittest
-import time
-from unittest.mock import patch, MagicMock
 
-from mac_control.actions.wifi import (
-    get_wifi_interface,
-    get_wifi_power_state,
-    get_connected_ssid,
-    get_network_details,
-    execute_wifi_command,
-)
-from mac_control.actions.bluetooth import (
-    get_bluetooth_power_state,
-    get_connected_bluetooth_devices,
-    execute_bluetooth_command,
-)
-from mac_control.models import ExecutionStatus
 from intent.matcher import LinguisticIntentMatcher
 from intent.models import CanonicalIntent
-from providers.provider_manager import classify_provider_error, ProviderManager
+from mac_control.actions.bluetooth import (
+    execute_bluetooth_command,
+    get_bluetooth_power_state,
+    get_connected_bluetooth_devices,
+)
+from mac_control.actions.wifi import (
+    execute_wifi_command,
+    get_connected_ssid,
+    get_network_details,
+    get_wifi_interface,
+    get_wifi_power_state,
+)
+from mac_control.models import ExecutionStatus
+from providers.provider_manager import classify_provider_error
 from ui.health_checker import DashboardStatsManager
 
 

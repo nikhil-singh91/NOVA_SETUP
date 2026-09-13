@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any
 
 from config.settings import settings
 from core.logger import get_logger
-from desktop.models import DesktopActionPlan, DesktopActionType
+
+from desktop.models import DesktopActionPlan
 
 logger = get_logger(__name__)
 

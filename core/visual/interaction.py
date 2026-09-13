@@ -18,10 +18,6 @@ except ImportError:
 from core.visual.models import (
     ScreenSnapshot,
     UIElement,
-    VisualActionPlan,
-    VisualActionType,
-    VisualConfidence,
-    VisualResult,
 )
 
 logger = get_logger(__name__)

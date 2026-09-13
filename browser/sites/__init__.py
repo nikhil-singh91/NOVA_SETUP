@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from browser.sites.amazon import AmazonSkill
 from browser.sites.base import BaseSiteSkill
-from browser.sites.generic import GenericSiteSkill, TRUSTED_SITES
+from browser.sites.generic import TRUSTED_SITES, GenericSiteSkill
 from browser.sites.github import GitHubSkill
 from browser.sites.google import GoogleSkill
 from browser.sites.youtube import YouTubeSkill

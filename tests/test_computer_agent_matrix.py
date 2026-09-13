@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from core.environment import EnvironmentContext, environment_observer
 from core.visual.models import (
@@ -12,7 +11,6 @@ from core.visual.models import (
     ScreenSnapshot,
     UIElement,
     UIElementType,
-    VisualConfidence,
 )
 from main import NovaApplication, TurnRequest
 

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from core.task_agent.executor import TaskExecutor
 from core.task_agent.models import (
-    StepStatus,
     TaskContext,
     TaskGoal,
     TaskPlan,

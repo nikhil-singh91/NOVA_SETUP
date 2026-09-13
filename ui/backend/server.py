@@ -6,16 +6,16 @@ import asyncio
 import base64
 import hashlib
 import json
-import os
 import struct
 import threading
 import time
 from typing import Any
 
 from core.logger import get_logger
+
 from ui.backend.command_gateway import command_gateway
 from ui.backend.event_bridge import event_bridge
-from ui.backend.models import AvatarState, CommandRequest, UIEvent, UIEventType
+from ui.backend.models import CommandRequest, UIEvent, UIEventType
 
 logger = get_logger(__name__)
 

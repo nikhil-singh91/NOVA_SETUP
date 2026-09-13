@@ -7,14 +7,13 @@ import re
 import ssl
 import urllib.parse
 import urllib.request
-from typing import Any
 
 import certifi
-
 from config.settings import settings
 from core.logger import get_logger
+
 from browser.engine import BaseBrowserEngine
-from browser.models import PageContent, PageExtractionError
+from browser.models import PageContent
 
 logger = get_logger(__name__)
 

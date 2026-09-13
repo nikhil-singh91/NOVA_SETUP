@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
+
 class StatusRenderer:
     """Provides simple CLI feedback widgets like spinning indicators."""
 

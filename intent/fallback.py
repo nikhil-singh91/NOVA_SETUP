@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 from core.logger import get_logger
 from core.registry import registry
+
 from intent.models import CanonicalIntent, StructuredAction
 from intent.normalizer import NormalizedInput
 

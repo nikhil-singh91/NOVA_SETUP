@@ -5,7 +5,8 @@ from __future__ import annotations
 import ctypes
 import subprocess
 from typing import Any
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 
 # Try to resolve display ID via Quartz (pyobjc-framework-Quartz)
 try:
@@ -137,9 +138,9 @@ def _execute_native(action: str, args: dict[str, Any]) -> ExecutionResult:
                 details={"requested_value": target_pct, "actual_value": actual}
             )
 
-    except Exception as exc:
+    except Exception:
         return _execute_fallback(action, args)
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown brightness action: {action}",
@@ -233,7 +234,7 @@ def _execute_fallback(action: str, args: dict[str, Any]) -> ExecutionResult:
             category=CommandCategory.BRIGHTNESS,
             error=str(exc)
         )
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown brightness action: {action}",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from core.screenshot import screenshot_service
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 
 
 def execute_screenshot_command(cmd: MacCommand) -> ExecutionResult:

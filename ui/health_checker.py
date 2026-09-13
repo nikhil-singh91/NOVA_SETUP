@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import os
-import sys
-import time
 import socket
-import threading
-from pathlib import Path
-from typing import Any, Callable
-from collections import deque
-from dataclasses import dataclass
 import subprocess
+import sys
+import threading
+import time
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 from config.settings import settings
-from core.registry import registry
 from core.lifecycle import lifecycle
+from core.registry import registry
 
 
 @dataclass
@@ -364,7 +364,7 @@ class DashboardStatsManager:
         """Record real-time Mac control execution details and append to recent actions."""
         now_str = time.strftime("%H:%M:%S")
         lat_str = f"{int(latency_ms)} ms" if latency_ms is not None and latency_ms < 1000 else (f"{latency_ms/1000:.2f} s" if latency_ms is not None else "N/A")
-        
+
         action_item = {
             "time": now_str,
             "command": command_text,
@@ -1183,31 +1183,31 @@ class HealthChecker:
                 self.results["core"] = core_res
             except Exception:
                 pass
-                
+
             try:
                 voice_res = self.check_voice()
                 self.results["voice"] = voice_res
             except Exception:
                 pass
-                
+
             try:
                 prov_res = self.check_providers()
                 self.results["providers"] = prov_res
             except Exception:
                 pass
-                
+
             try:
                 mem_res = self.check_memory()
                 self.results["memory"] = mem_res
             except Exception:
                 pass
-                
+
             try:
                 env_res = self.check_environment()
                 self.results["environment"] = env_res
             except Exception:
                 pass
-                
+
             try:
                 perf_res = self.get_performance()
                 self.results["performance"] = perf_res
@@ -1219,7 +1219,7 @@ class HealthChecker:
     def check_core(self) -> dict[str, Any]:
         """Verify core lifecycle services status and health."""
         checks = {}
-        
+
         # 1. Lifecycle
         try:
             checks["Lifecycle"] = {
@@ -1307,18 +1307,18 @@ class HealthChecker:
         try:
             import pyaudio
             p = pyaudio.PyAudio()
-            
+
             # Find default input/output devices
             try:
                 default_input = p.get_default_input_device_info()
                 checks["Microphone"] = default_input.get("name", "Unknown Microphone")
-            except IOError:
+            except OSError:
                 checks["Microphone"] = "No default input device"
 
             try:
                 default_output = p.get_default_output_device_info()
                 checks["Speaker"] = default_output.get("name", "Unknown Speaker")
-            except IOError:
+            except OSError:
                 checks["Speaker"] = "No default output device"
 
             # Check Microphone Permission based on device detection
@@ -1367,14 +1367,12 @@ class HealthChecker:
     def check_providers(self) -> dict[str, Any]:
         """Test API configuration and connectivity for AI providers."""
         checks = {}
-        
+
         # Test internet connectivity
-        internet_connected = False
         try:
             socket.setdefaulttimeout(1.5)
             # Query DNS to check connection
             socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
-            internet_connected = True
             checks["Internet"] = {"status": "Healthy", "message": "Connected"}
         except Exception:
             checks["Internet"] = {"status": "Warning", "message": "Offline / Port 53 Blocked"}
@@ -1453,12 +1451,12 @@ class HealthChecker:
             from core.paths import MEMORY_DIR
             store_file = MEMORY_DIR / "memory_store.json"
             checks["Memory File"] = str(store_file)
-            
+
             if store_file.exists():
                 checks["Memory Status"] = "Healthy"
                 import json
                 try:
-                    with open(store_file, "r") as f:
+                    with open(store_file) as f:
                         data = json.load(f)
                     if isinstance(data, dict):
                         conversations = data.get("conversations", [])
@@ -1500,7 +1498,7 @@ class HealthChecker:
         env_file = project_root() / ".env"
         if env_file.exists():
             checks[".env status"] = "Present"
-        
+
         # Check preferences.json existence
         from core.paths import PROMPTS_DIR
         pref_file = PROMPTS_DIR / "preferences.json"

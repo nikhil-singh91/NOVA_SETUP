@@ -1,11 +1,10 @@
 """Comprehensive regression test suite for NOVA command routing, normalization, and hardware control."""
 
+
 import pytest
-from unittest.mock import MagicMock, patch
 from intent.engine import NaturalLanguageIntentEngine
-from intent.normalizer import TextNormalizer
 from intent.models import CanonicalIntent, StructuredAction
-from desktop.apps import AppLauncher
+from intent.normalizer import TextNormalizer
 
 
 @pytest.fixture

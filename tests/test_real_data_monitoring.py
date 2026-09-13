@@ -1,10 +1,8 @@
 """Automated test suite for NOVA Real System State & Control Center Telemetry."""
 
-import time
-import pytest
-from ui.health_checker import DashboardStatsManager, SystemAlert
+from providers.provider_manager import ProviderManager
+from ui.health_checker import DashboardStatsManager
 from ui.terminal_dashboard import TerminalDashboard
-from providers.provider_manager import ProviderManager, ProviderRuntimeStatus
 
 
 def test_provider_runtime_telemetry_and_quota_classification():

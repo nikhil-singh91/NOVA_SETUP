@@ -16,7 +16,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from config.settings import settings
 from core.environment import environment_observer, log_environment_debug
 from core.logger import get_logger
 

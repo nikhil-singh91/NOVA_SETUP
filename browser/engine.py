@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import time
 from abc import ABC, abstractmethod
@@ -12,7 +11,12 @@ from typing import Any
 
 from config.settings import settings
 from core.logger import get_logger
-from browser.models import BrowserError, BrowserLaunchError, BrowserNotFoundError, NavigationError, PageContent
+
+from browser.models import (
+    BrowserNotFoundError,
+    NavigationError,
+    PageContent,
+)
 
 logger = get_logger(__name__)
 
@@ -339,7 +343,7 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
             end tell
             '''
         elif "Safari" in self._app_name:
-            script = f'''
+            script = '''
             tell application "Safari"
                 if (count of windows) > 0 then
                     set curIdx to index of current tab of front window
@@ -438,10 +442,10 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
             end tell
             '''
         elif "Safari" in self._app_name:
-            script = f'''
+            script = '''
             tell application "Safari"
                 if (count of windows) > 0 then
-                    set outList to {{}}
+                    set outList to {}
                     set totalTabs to count of tabs of front window
                     repeat with i from 1 to totalTabs
                         set tTitle to name of tab i of front window
@@ -515,7 +519,7 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
                 idx = tab.get("index", 1)
                 success = self.set_active_tab_index(idx)
                 time.sleep(0.2)
-                new_state = self.refresh_browser_state()
+                self.refresh_browser_state()
                 log_browser_diagnostics("SWITCH_TAB", "SUCCESS" if success else "FAILED", tab_idx=idx, title=tab["title"])
                 return success, idx, tab["title"]
 
@@ -534,7 +538,7 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
             end tell
             '''
         elif "Safari" in self._app_name:
-            script = f'''
+            script = '''
             tell application "Safari"
                 if (count of windows) > 0 then
                     close current tab of front window
@@ -552,14 +556,14 @@ class MacOSNativeBrowserEngine(BaseBrowserEngine):
     def navigate_back(self) -> bool:
         """Go back in browser history."""
         js = "window.history.back(); return 'back';"
-        res = self.execute_script(js)
+        self.execute_script(js)
         log_browser_diagnostics("NAVIGATE_BACK", "SUCCESS")
         return True
 
     def navigate_forward(self) -> bool:
         """Go forward in browser history."""
         js = "window.history.forward(); return 'forward';"
-        res = self.execute_script(js)
+        self.execute_script(js)
         log_browser_diagnostics("NAVIGATE_FORWARD", "SUCCESS")
         return True
 

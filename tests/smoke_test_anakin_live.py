@@ -10,13 +10,10 @@ from __future__ import annotations
 import sys
 import time
 
-from config.settings import settings
 from services.anakin_service import (
     AnakinAuthenticationError,
     AnakinInsufficientCreditsError,
     AnakinRateLimitError,
-    AnakinService,
-    CapabilityStatus,
     anakin_service,
 )
 

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import time
-import pytest
+from typing import Any
 
-from core.event_bus import EventBus, NovaEvent
-from core.registry import registry
 from browser.engine import BaseBrowserEngine
 from browser.manager import BrowserManager
 from browser.models import (
     ActionType,
     BrowserActionPlan,
-    BrowserResult,
     Platform,
 )
 from browser.parser import BrowserIntentParser
@@ -20,6 +16,8 @@ from browser.router import BrowserActionRouter
 from browser.safety import BrowserSafetyPolicy
 from browser.sessions import BrowserSessionManager
 from browser.sites import GenericSiteSkill, GoogleSkill, YouTubeSkill
+from core.event_bus import EventBus, NovaEvent
+from core.registry import registry
 
 
 class MockBrowserEngine(BaseBrowserEngine):
@@ -31,6 +29,10 @@ class MockBrowserEngine(BaseBrowserEngine):
         self.typed_texts: list[tuple[str, str]] = []
         self.scripts_executed: list[str] = []
         self._is_initialized = False
+
+    @property
+    def current_url(self) -> str:
+        return self.opened_urls[-1] if self.opened_urls else ""
 
     @property
     def browser_name(self) -> str:
@@ -74,7 +76,7 @@ class MockBrowserEngine(BaseBrowserEngine):
     def navigate_forward(self) -> bool:
         return True
 
-    def scroll_page(self, direction: str = "down", amount: int = 500) -> bool:
+    def scroll_page(self, direction: str = "down", amount: str | int = 500) -> bool:
         return True
 
     def refresh_browser_state(self) -> dict[str, Any]:

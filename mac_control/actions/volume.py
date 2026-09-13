@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
+
 
 def get_volume_level() -> int:
     """Query AppleScript for current system volume setting."""

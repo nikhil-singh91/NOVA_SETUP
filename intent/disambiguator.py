@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.logger import get_logger
-from intent.models import CanonicalIntent, StructuredAction
+
+from intent.models import CanonicalIntent
 
 logger = get_logger(__name__)
 

@@ -38,7 +38,6 @@ from config.settings import settings
 from core.exceptions import StartupError
 from core.logger import get_logger
 from core.paths import ensure_directories
-
 from core.registry import registry
 
 logger = get_logger(__name__)
@@ -155,7 +154,7 @@ class LifecycleManager:
             if self._started:
                 self.shutdown()
             self.start()
-            
+
             logger.info("NOVA restarted successfully.")
 
     def is_running(self) -> bool:

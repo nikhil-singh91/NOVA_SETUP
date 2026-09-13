@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import subprocess
 import time
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
 
 from desktop.apps import AppLauncher
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
+
 
 def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
     """Execute application lifecycle actions (open, quit, force-quit, restart)."""
@@ -19,7 +20,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
             command_name="Application Control",
             category=CommandCategory.APPLICATIONS
         )
-        
+
     # Redirect standard folder queries in case they bypass parser categorizations
     import os
     system_folders = ["desktop", "downloads", "documents", "project", "movies", "pictures", "finder"]
@@ -28,7 +29,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
         if folder in app_query:
             matched_folder = folder
             break
-            
+
     if matched_folder is not None and (action == "open" or action == "focus"):
         from mac_control.actions.finder import FOLDER_MAP
         path_str = FOLDER_MAP.get(matched_folder, "~/")
@@ -51,7 +52,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
             )
 
     app_name = AppLauncher.resolve_app_name(app_query)
-    
+
     try:
         if action == "open" or action == "focus":
             # For Finder, we open Finder path
@@ -66,7 +67,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.APPLICATIONS,
                 details={"app_name": app_name}
             )
-            
+
         elif action == "close":
             if app_name == "Finder":
                 return ExecutionResult(
@@ -84,7 +85,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.APPLICATIONS,
                 details={"app_name": app_name}
             )
-            
+
         elif action == "force_quit":
             if app_name == "Finder":
                 subprocess.run(["killall", "Finder"], check=True)
@@ -103,7 +104,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.APPLICATIONS,
                 details={"app_name": app_name}
             )
-            
+
         elif action == "restart":
             # Quit the application, wait, then open it again
             script = f'tell application "{app_name}" to quit'
@@ -117,7 +118,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.APPLICATIONS,
                 details={"app_name": app_name}
             )
-            
+
     except Exception as exc:
         return ExecutionResult(
             status=ExecutionStatus.FAILED,
@@ -125,7 +126,7 @@ def execute_applications_command(cmd: MacCommand) -> ExecutionResult:
             command_name="Application Control",
             category=CommandCategory.APPLICATIONS
         )
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown application action: {action}",

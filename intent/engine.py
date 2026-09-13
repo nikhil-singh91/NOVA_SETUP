@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
-from config.settings import settings
+
 from core.logger import get_logger
+
 from intent.fallback import AIIntentClassifier
 from intent.matcher import LinguisticIntentMatcher
 from intent.models import CanonicalIntent, StructuredAction
@@ -23,7 +23,7 @@ def log_intent_diagnostics(action: StructuredAction) -> None:
     params = action.parameters or {}
     target = params.get("site") or params.get("app_name") or params.get("entity") or params.get("folder_name") or params.get("target_name") or params.get("target_url") or ""
     query = params.get("query") or params.get("text") or ""
-    
+
     # Map executor
     executor_name = {
         "screen_recording": "ScreenRecordingManager",
@@ -45,7 +45,7 @@ def log_intent_diagnostics(action: StructuredAction) -> None:
         plan_lines.append(f"1. Open {target or 'target site'}")
         plan_lines.append(f"2. Search \"{query}\"")
     elif action.intent == CanonicalIntent.SEARCH_WEB:
-        plan_lines.append(f"1. Open search engine")
+        plan_lines.append("1. Open search engine")
         plan_lines.append(f"2. Query \"{query}\"")
     elif action.intent == CanonicalIntent.PLAY_MEDIA:
         plan_lines.append("1. Open YouTube")

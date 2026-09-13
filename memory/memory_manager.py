@@ -37,11 +37,12 @@ import os
 import tempfile
 import threading
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Final, Sequence
+from typing import Any, Final
 
 # from core.exceptions import MemorySystemError
 from core.exceptions import MemorySystemError as MemoryError
@@ -358,7 +359,7 @@ class MemoryManager:
             normalized_importance = _validate_importance(importance)
             normalized_tags = _validate_tags(tags)
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             entry = MemoryEntry(
                 id=uuid.uuid4().hex,
                 category=normalized_category,
@@ -444,7 +445,7 @@ class MemoryManager:
                 importance=new_importance,
                 tags=new_tags,
                 created_at=existing_entry.created_at,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
             self._memories[memory_id] = updated_entry
 
@@ -839,6 +840,15 @@ class MemoryManager:
                 "storage_size_bytes": storage_size_bytes,
             }
 
+    def shutdown(self) -> None:
+        """Flush memory state and gracefully terminate memory manager resources."""
+        with self._lock:
+            try:
+                self._save()
+                logger.info("MemoryManager shutdown complete.")
+            except Exception as exc:
+                logger.warning("Error saving memory store during shutdown: %s", exc)
+
     # -------------------------------------------------------------------
     # Internal helpers
     # -------------------------------------------------------------------
@@ -930,7 +940,7 @@ class MemoryManager:
         a UTC timestamp in its name, so a corrupted store can still be
         inspected or manually recovered later.
         """
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         quarantine_path = self._storage_path.with_name(
             f"{self._storage_path.stem}.corrupted-{timestamp}{self._storage_path.suffix}"
         )

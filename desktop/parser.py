@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
-from typing import Any
 
 from core.logger import get_logger
+
 from desktop.models import (
     DesktopActionPlan,
     DesktopActionType,
@@ -156,7 +155,7 @@ class DesktopIntentParser:
         if m_create_files_loc:
             files_part = m_create_files_loc.group(1).strip()
             loc_part = m_create_files_loc.group(2).strip()
-            
+
             # Extract filenames
             tokens = [t.strip().strip(",") for t in re.split(r"[\s,]+|and\s+", files_part) if t.strip() and "." in t]
             if not tokens and ("." in files_part or "python file" in files_part):
@@ -276,7 +275,7 @@ class DesktopIntentParser:
             if m_open:
                 app_raw = m_open.group(1).strip()
                 from browser.sites.generic import TRUSTED_SITES
-                
+
                 is_explicit_app = "app" in lower or "application" in lower or lower.startswith("launch ")
                 if app_raw.lower() in TRUSTED_SITES and not is_explicit_app:
                     pass

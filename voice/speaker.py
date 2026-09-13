@@ -10,17 +10,17 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Any, Callable, Final
+from collections.abc import Callable
+from typing import Final
 
-from config.settings import settings
 from core.logger import get_logger
+
 from voice.state import SpeechOutputResult
 
 logger = get_logger(__name__)
 
 
 from core.response_cleaner import clean_model_response
-
 
 _EMOJI_AND_SYMBOL_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?:"

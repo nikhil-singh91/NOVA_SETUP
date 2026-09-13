@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from core.environment import EnvironmentContext, environment_observer
 from main import NovaApplication, TurnRequest
 

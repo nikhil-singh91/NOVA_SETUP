@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import queue
 import threading
 import time
-from typing import Any, Callable
+from typing import Any
 
 from core.logger import get_logger
+
 from ui.backend.event_bridge import event_bridge
 from ui.backend.models import AvatarState, CommandRequest, CommandResponse, UIEventType
 
@@ -131,7 +131,7 @@ class CommandGateway:
         event_bridge.emit_custom_event(
             event_type=UIEventType.COMMAND_COMPLETED,
             avatar_state=AvatarState.SUCCESS,
-            message=f"Task complete.",
+            message="Task complete.",
         )
         time.sleep(1.0)
         event_bridge.emit_custom_event(

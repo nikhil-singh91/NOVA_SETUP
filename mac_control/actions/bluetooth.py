@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Any
 
 from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 

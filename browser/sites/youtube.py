@@ -7,17 +7,15 @@ import ssl
 import time
 import urllib.parse
 import urllib.request
-from typing import Any
 
 import certifi
+from core.logger import get_logger
+from media.service import MediaPlaybackService
 
 from browser.engine import BaseBrowserEngine, log_browser_diagnostics
 from browser.models import ActionType, BrowserActionPlan, BrowserResult, Platform
 from browser.sessions import BrowserSessionManager
 from browser.sites.base import BaseSiteSkill
-from core.logger import get_logger
-from media.models import MediaRequest, VideoCandidate
-from media.service import MediaPlaybackService
 
 logger = get_logger(__name__)
 
@@ -370,7 +368,7 @@ class YouTubeSkill(BaseSiteSkill):
             info = engine.get_page_info()
             act_url = info.get("url", "")
             act_title = info.get("title", "")
-            if "/shorts" in act_url or "youtube.com" in act_url:
+            if "/shorts" in act_url or "youtube.com" in act_url or "shorts" in act_title.lower():
                 verified = True
         except Exception:
             verified = success

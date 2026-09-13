@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from mac_control.models import MacCommand, CommandCategory
+
+from mac_control.models import CommandCategory, MacCommand
+
 
 class CommandParser:
     """Classifies user queries into specific executable macOS actions using regex."""
@@ -23,7 +25,7 @@ class CommandParser:
                 "category": CommandCategory.VOLUME,
                 "action": "mute",
                 "patterns": [
-                    r"\bmute\b", r"\bsilent\b", r"\bawaa?z\s+band\b", 
+                    r"\bmute\b", r"\bsilent\b", r"\bawaa?z\s+band\b",
                     r"\bawaa?z\s+mute\b", r"\bmute\s+kar\b"
                 ]
             },
@@ -31,7 +33,7 @@ class CommandParser:
                 "category": CommandCategory.VOLUME,
                 "action": "unmute",
                 "patterns": [
-                    r"\bunmute\b", r"\bawaa?z\s+chalu\b", r"\bawaa?z\s+unmute\b", 
+                    r"\bunmute\b", r"\bawaa?z\s+chalu\b", r"\bawaa?z\s+unmute\b",
                     r"\bunmute\s+kar\b"
                 ]
             },
@@ -177,7 +179,7 @@ class CommandParser:
                 "category": CommandCategory.MEDIA,
                 "action": "next",
                 "patterns": [
-                    r"\bnext\b", r"\bnext\s+song\b", r"\bnext\s+track\b", 
+                    r"\bnext\b", r"\bnext\s+song\b", r"\bnext\s+track\b",
                     r"\bagla\s+gaana\b", r"\bagla\b"
                 ]
             },
@@ -447,12 +449,12 @@ class CommandParser:
                 if match:
                     # Resolve command parameters
                     args = dict(rule.get("args", {}))
-                    
+
                     # Capture specific regex group parameters
                     if match.groups():
                         captured = match.group(1).strip()
                         action = rule["action"]
-                        
+
                         # Handle specific argument mappings
                         if rule["category"] == CommandCategory.VOLUME and action == "set":
                             args["value"] = int(captured)

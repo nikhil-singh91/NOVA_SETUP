@@ -3,20 +3,15 @@
 from __future__ import annotations
 
 import os
-import sys
-import shutil
 import platform
+import shutil
 import socket
-import threading
-from typing import Any
+import sys
 
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.align import Align
-
-from config.settings import settings
 from core.logger import get_logger
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 logger = get_logger(__name__)
 
@@ -43,22 +38,22 @@ class Doctor:
         # 1. System & Resources
         self._check_python(table)
         self._check_system_resources(table)
-        
+
         # 2. Dependencies
         self._check_dependencies(table)
-        
+
         # 3. Environment & Config
         self._check_env_keys(table)
-        
+
         # 4. Hardware Audio
         self._check_audio_hardware(table)
-        
+
         # 5. AI Providers & Network
         self._check_ai_endpoints(table)
-        
+
         # 6. Database & Memory
         self._check_databases(table)
-        
+
         # 7. OS Permissions
         self._check_os_permissions(table)
 
@@ -68,7 +63,7 @@ class Doctor:
         # Print Auto-Fix recommendations if issues exist
         if self.issues:
             self.console.print(Panel(
-                "[bold yellow]⚠️  AUTO-FIX RECOMMENDATIONS[/]\n\n" + 
+                "[bold yellow]⚠️  AUTO-FIX RECOMMENDATIONS[/]\n\n" +
                 "\n\n".join(
                     f"[bold red]✗ {issue['target']}[/]\n"
                     f"  [bold]Problem:[/bold] {issue['problem']}\n"
@@ -97,7 +92,7 @@ class Doctor:
             status_text = "[bold red]FAIL[/]"
             if problem and fix:
                 self.issues.append({"target": target, "problem": problem, "fix": fix})
-                
+
         table.add_row(category, target, status_text, details)
 
     def _check_python(self, table: Table) -> None:
@@ -204,11 +199,11 @@ class Doctor:
         try:
             import pyaudio
             p = pyaudio.PyAudio()
-            
+
             try:
                 info = p.get_default_input_device_info()
                 self._add_result(table, "Audio Node", "Default Microphone", "PASS", f"{info.get('name')} (Index={info.get('index')})")
-            except Exception as e:
+            except Exception:
                 self._add_result(
                     table, "Audio Node", "Default Microphone", "FAIL", "No default input device",
                     "No microphone found or PortAudio stream is closed.",
@@ -218,13 +213,13 @@ class Doctor:
             try:
                 info = p.get_default_output_device_info()
                 self._add_result(table, "Audio Node", "Default Speaker", "PASS", f"{info.get('name')} (Index={info.get('index')})")
-            except Exception as e:
+            except Exception:
                 self._add_result(
                     table, "Audio Node", "Default Speaker", "FAIL", "No default output device",
                     "No speaker found.",
                     "Verify audio output device connection or open macOS System Settings -> Sound -> Output."
                 )
-                
+
         except Exception as e:
             self._add_result(table, "Audio Node", "PortAudio Engine", "FAIL", str(e))
         finally:
@@ -268,7 +263,7 @@ class Doctor:
                 s.connect((ip, 443))
                 s.close()
                 self._add_result(table, "Connectivity", label, "PASS", f"Connection test to {host}:443 succeeded")
-            except Exception as e:
+            except Exception:
                 self._add_result(
                     table, "Connectivity", label, "WARNING", "Port 443 blocked / Connection failed",
                     f"Unable to reach {label} API gateway.",
@@ -297,10 +292,9 @@ class Doctor:
                 if vs.health_check():
                     self._add_result(table, "Databases", "Vector DB (Chroma)", "PASS", "Active and queryable")
                     has_vector_db = True
-            
+
             if not has_vector_db:
                 # Attempt to verify chroma package import
-                import chromadb
                 self._add_result(table, "Databases", "Vector DB (Chroma)", "WARNING", "Package imported, service not loaded")
         except Exception as e:
             self._add_result(

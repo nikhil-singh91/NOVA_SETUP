@@ -1,11 +1,10 @@
 """Automated regression test suite verifying intent detection, normalization, browser search, and Mac control."""
 
-import pytest
-from intent.normalizer import TextNormalizer
+from browser.models import ActionType, Platform
+from browser.parser import BrowserIntentParser
 from intent.matcher import LinguisticIntentMatcher
 from intent.models import CanonicalIntent
-from browser.parser import BrowserIntentParser
-from browser.models import ActionType, Platform
+from intent.normalizer import TextNormalizer
 
 
 def test_natural_language_conversational_prefix_normalization():

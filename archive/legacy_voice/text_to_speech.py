@@ -61,10 +61,11 @@ import re
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Final
+from typing import Any, Final
 
 from core.exceptions import TextToSpeechError
 from core.logger import get_logger
@@ -364,7 +365,7 @@ class SpeechResult:
             duration_seconds=duration_seconds,
             engine_name=engine_name,
             voice_id=voice_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             error_message=None,
         )
 
@@ -400,7 +401,7 @@ class SpeechResult:
             duration_seconds=duration_seconds,
             engine_name=engine_name,
             voice_id=voice_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             error_message=error_message,
         )
 
@@ -1927,11 +1928,11 @@ class TextToSpeechManager:
                         stt.recognizer._mic_stream.pause_recording()
             except Exception as e:
                 logger.warning("Failed to pause microphone before speaking: %s", e)
-            
+
             # Publish speaking started event to central bus
             try:
-                from core.registry import registry
                 from core.event_bus import NovaEvent
+                from core.registry import registry
                 if registry.exists("event_bus"):
                     registry.get("event_bus").publish(NovaEvent.SPEAKING_STARTED, text=text)
             except Exception as e:
@@ -1983,11 +1984,11 @@ class TextToSpeechManager:
             finally:
                 self._speaking_event.clear()
                 voice.text_to_speech.is_speaking = False
-                
+
                 # Publish speaking finished event to central bus
                 try:
-                    from core.registry import registry
                     from core.event_bus import NovaEvent
+                    from core.registry import registry
                     if registry.exists("event_bus"):
                         success_val = (result.status == SpeechStatus.SUCCESS) if 'result' in locals() else True
                         registry.get("event_bus").publish(NovaEvent.SPEAKING_FINISHED, success=success_val)
@@ -2005,7 +2006,7 @@ class TextToSpeechManager:
                             stt.recognizer._mic_stream.resume_recording()
                 except Exception as e:
                     logger.warning("Failed to resume microphone after speaking: %s", e)
-                    
+
                 self._queue.task_done()
 
             if on_complete is not None:

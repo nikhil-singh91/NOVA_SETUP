@@ -40,16 +40,16 @@ import queue
 import re
 import signal
 import sys
-import time
 import threading
+import time
 import uuid
-import numpy as np
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
-
+import numpy as np
 from core.exceptions import MemorySystemError as NovaMemoryError
 from core.exceptions import (
     SpeechRecognitionError,
@@ -57,6 +57,7 @@ from core.exceptions import (
 )
 from core.lifecycle import lifecycle
 from core.logger import get_logger, setup_logging
+from mac_control import MacControlManager
 from memory.memory_manager import MemoryCategory, MemoryManager
 from memory.vector_store import VectorStore
 from personality.emotion_engine import ConversationAnalysis, ConversationMode, EmotionEngine
@@ -70,10 +71,9 @@ from personality.system_prompt import (
     SystemPromptManager,
 )
 from providers.provider_manager import AllProvidersFailedError, ProviderManager, TaskType
+from voice.commands import CommandRecognizer, VoiceCommandRouter
 from voice.speech_to_text import SpeechToTextManager
 from voice.text_to_speech import TextToSpeechManager
-from voice.commands import CommandRecognizer, VoiceCommandRouter
-from mac_control import MacControlManager
 
 logger = get_logger(__name__)
 
@@ -242,7 +242,7 @@ class ActivityState:
 
     current_project: str | None = None
     current_task: str | None = None
-    session_start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    session_start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_conversation_topic: str | None = None
 
 
@@ -288,12 +288,12 @@ class VoiceStateManager:
             old_state = self._state
             if old_state == new_state:
                 return
-            
+
             # Transition rules check
             if old_state == VoiceState.SPEAKING and new_state == VoiceState.LISTENING:
                 # This transition is now valid and standard!
                 pass
-                
+
             self._state = new_state
             logger.info("Voice state transitioned: %s -> %s", old_state.value, new_state.value)
             self._event_bus.publish(NovaEvent.STATE_CHANGED, old_state=old_state.value, new_state=new_state.value)
@@ -404,7 +404,7 @@ class NovaApplication:
         # Parallel initialization of independent subsystems
         threads = []
         errors = []
-        
+
         def run_init(func, name):
             try:
                 func()
@@ -421,14 +421,14 @@ class NovaApplication:
             t = threading.Thread(target=run_init, args=(func, name), daemon=True, name=f"nova-init-{name}")
             t.start()
             threads.append(t)
-            
+
         for t in threads:
             t.join()
-            
+
         if errors:
             self._shutdown()
             return 1
-        
+
         self._initialize_voice()
         self._register_signal_handlers()
         self.state_manager.set_state(VoiceState.LISTENING)
@@ -464,8 +464,8 @@ class NovaApplication:
 
         return exit_code
 
-    
-    
+
+
     # -------------------------------------------------------------------
     # Initialization
     # -------------------------------------------------------------------
@@ -887,17 +887,17 @@ class NovaApplication:
             from ui.health_checker import DashboardStatsManager
             DashboardStatsManager.update("active_provider", active_provider_name or "Gemini")
             DashboardStatsManager.update("last_transcript", resolved_text)
-            
+
             gen_start = time.monotonic()
             response_text = self._generate_response(
                 resolved_text, context, profile_name, task_type, turn_id
             )
             gen_elapsed = time.monotonic() - gen_start
             DashboardStatsManager.update("latency", f"{gen_elapsed:.2f}s")
-            
+
             if response_text is None:
                 return
-            
+
             tokens_estimate = len(resolved_text.split()) + len(response_text.split())
             DashboardStatsManager.update("tokens", str(int(tokens_estimate * 1.3)))
 
@@ -974,14 +974,14 @@ class NovaApplication:
         if getattr(self, "_pending_confirmation_command", None) is not None:
             pending_cmd = self._pending_confirmation_command
             pending_raw = getattr(self, "_pending_raw_input", "")
-            
+
             # Reset states immediately so we don't loop
             self._pending_confirmation_command = None
             self._pending_raw_input = None
-            
+
             is_positive = any(word in raw_text_clean for word in ["yes", "yeah", "correct", "haan", "sure", "ok", "yep", "confirm"])
             is_negative = any(word in raw_text_clean for word in ["no", "nah", "wrong", "cancel"])
-            
+
             if is_positive:
                 logger.info("[turn-%s] Boss confirmed command: '%s'", turn_id, pending_cmd)
                 # Execute the confirmed command!
@@ -992,7 +992,7 @@ class NovaApplication:
                 else:
                     self._deliver_response(f"Executed command: {pending_cmd}", turn_id)
                 return None
-                
+
             elif is_negative:
                 # Check if they corrected us (e.g. "No, I said Open Safari")
                 correction_target = None
@@ -1002,22 +1002,22 @@ class NovaApplication:
                         # Capitalize words to normalize command
                         correction_target = " ".join(w.capitalize() for w in remainder.split())
                         break
-                        
+
                 if correction_target:
                     # Save correction to self-learning JSON database
                     from voice.speech_to_text import save_speech_correction
                     save_speech_correction(pending_raw, correction_target)
-                    
+
                     self._deliver_response(f"Understood Boss. Learning correction. Running {correction_target}.", turn_id)
                     mac_result = self.mac_control_manager.process_input(correction_target)
                     if mac_result is not None:
                         voice_reply = self.mac_control_manager.get_voice_response(mac_result)
                         self._deliver_response(voice_reply, turn_id)
                     return None
-                    
+
                 self._deliver_response("Okay Boss. Command cancelled.", turn_id)
                 return None
-                
+
             else:
                 logger.info("[turn-%s] Unrecognized confirmation reply, treating as new command.", turn_id)
 
@@ -1159,14 +1159,14 @@ class NovaApplication:
                 self._assistant_speaking = False
                 self._current_spoken_text = ""
                 self._stop_interruption_monitor()
-                
+
                 # Enforce a 500 ms settling pause to let room echo dissipate
                 time.sleep(0.50)
-                
+
                 if self.stt_manager is not None:
                     self.stt_manager.clear_microphone_queue()
                 self.event_bus.publish(NovaEvent.SPEAKING_FINISHED, success=result.success)
-                
+
                 # Chain next continuous conversation turn immediately!
                 if self._voice_input_ready and self._in_conversation_flow and not self._shutdown_requested.is_set():
                     if not self._voice_turn_queued:
@@ -1208,43 +1208,43 @@ class NovaApplication:
         """Monitor microphone stream using a 2-stage interruption pipeline."""
         if self.stt_manager is None or not self.stt_manager._initialized:
             return
-            
+
         recognizer = self.stt_manager._recognizer
         if not hasattr(recognizer, "_mic_stream") or recognizer._mic_stream is None:
             return
-            
+
         mic = recognizer._mic_stream
         mic.start("interruption_monitor")
         mic.clear_queue()
-        
+
         # Audio VAD for Stage 1
         from voice.speech_to_text import AudioVAD
         vad = AudioVAD(sample_rate=16000, frame_duration_ms=30)
-        
+
         try:
             while not self._interruption_event.is_set() and self._assistant_speaking:
                 chunk = mic.read_chunk(timeout=0.05)
                 if not chunk:
                     continue
-                
+
                 # Check VAD (Stage 1)
                 frame_int16 = np.frombuffer(chunk, dtype=np.int16)
                 frame_float32 = frame_int16.astype(np.float32) / 32768.0
                 is_speech = vad.process_frame(frame_float32)
-                
+
                 if is_speech:
                     # Speech detected (Stage 1 trigger) -> Record 500 ms (Stage 2)
                     speech_buffer = bytearray(chunk)
-                    
+
                     # 16 chunks of 30ms = 480ms (total ~510ms with trigger chunk)
                     for _ in range(16):
                         c = mic.read_chunk(timeout=0.05)
                         if c:
                             speech_buffer.extend(c)
-                            
+
                     buf_int16 = np.frombuffer(bytes(speech_buffer), dtype=np.int16)
                     buf_float32 = buf_int16.astype(np.float32) / 32768.0
-                    
+
                     try:
                         # Quick high-quality transcription pass
                         segments, info = recognizer._model.transcribe(
@@ -1255,14 +1255,14 @@ class NovaApplication:
                             vad_filter=True,
                             condition_on_previous_text=False
                         )
-                        
+
                         segments = list(segments)
                         if not segments:
                             continue
-                            
+
                         # Validate segments
                         valid_text_list = []
-                        
+
                         for seg in segments:
                             # 1. Metadata thresholds to reject background noise/garbage
                             if seg.no_speech_prob > 0.35:
@@ -1271,33 +1271,33 @@ class NovaApplication:
                                 continue
                             if seg.compression_ratio > 2.4:
                                 continue
-                                
+
                             # 2. Text validation
                             seg_text = seg.text.strip()
                             if not seg_text:
                                 continue
-                                
+
                             # Check for alphanumeric words
                             words = seg_text.lower().split()
                             clean_words = [re.sub(r'[^\w\s]', '', w) for w in words]
                             clean_words = [w for w in clean_words if w]
                             if not clean_words:
                                 continue
-                                
+
                             # 3. Repetition check
                             unique_words = set(clean_words)
                             if len(clean_words) >= 4 and len(unique_words) / len(clean_words) < 0.45:
                                 continue
-                                
+
                             valid_text_list.append(seg_text)
-                            
+
                         if not valid_text_list:
                             continue
-                            
+
                         full_text = " ".join(valid_text_list).strip()
                         if not full_text:
                             continue
-                            
+
                         # 4. Self-voice immunity filter: ignore echoes of NOVA's own speaking output
                         is_self_voice = False
                         if self._current_spoken_text:
@@ -1305,23 +1305,23 @@ class NovaApplication:
                             clean_spoken = re.sub(r'[^\w\s]', '', self._current_spoken_text.lower()).strip()
                             if clean_transcribed and clean_transcribed in clean_spoken:
                                 is_self_voice = True
-                                
+
                         if not is_self_voice:
                             logger.info("Speech playback interrupted by Boss: '%s'", full_text)
                             sys.stdout.write(f"\n\033[91m🛑 Interrupted by Boss: '{full_text}'\033[0m\n")
                             sys.stdout.flush()
-                            
+
                             # Stop active speech output
                             if self.tts_manager:
                                 self.tts_manager.stop()
                             self._assistant_speaking = False
-                            
+
                             # Trigger continuous voice conversation flow immediately
                             self._in_conversation_flow = True
                             break
                     except Exception as exc:
                         logger.debug("Interruption transcription error: %s", exc)
-                        
+
                     # Reset VAD and clear queue to ignore processing lag audio
                     vad = AudioVAD(sample_rate=16000, frame_duration_ms=30)
                     mic.clear_queue()
@@ -1514,7 +1514,7 @@ class NovaApplication:
         """
         self.event_bus.publish(NovaEvent.APPLICATION_SHUTDOWN)
 
-        session_length = datetime.now(timezone.utc) - self.activity.session_start_time
+        session_length = datetime.now(UTC) - self.activity.session_start_time
         farewell = "See you soon Boss."
 
         self.event_bus.publish(NovaEvent.RESPONSE_GENERATED, text=farewell, provider=None)
@@ -1537,7 +1537,7 @@ class NovaApplication:
         print(getattr(self, "_last_turn_input", "shutdown"))
         print("\n🟢 Shutdown command detected.")
         print("\n💾 Saving memory...")
-        session_length = datetime.now(timezone.utc) - self.activity.session_start_time
+        session_length = datetime.now(UTC) - self.activity.session_start_time
         summary = (
             f"project={self.activity.current_project or 'none'}; "
             f"topic={self.activity.last_conversation_topic or 'none'}; "

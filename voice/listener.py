@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
-
 from core.logger import get_logger
+
 from voice.microphone import MicrophoneManager
 from voice.state import VADState, VoiceState
 from voice.vad import VoiceActivityDetector

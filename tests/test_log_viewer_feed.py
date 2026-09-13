@@ -1,8 +1,8 @@
 """Automated test suite for NOVA Operations Control Center Log Viewer Feed."""
 
 import time
-import pytest
-from core.logger import get_logger, setup_logging
+
+from core.logger import get_logger
 from ui.health_checker import DashboardStatsManager, LogEntry
 from ui.terminal_dashboard import TerminalDashboard
 
@@ -11,7 +11,7 @@ def test_log_entry_dataclass():
     """Verify LogEntry attributes, level normalization, and backwards compatibility."""
     now = time.time()
     entry = LogEntry(timestamp=now, level="INFO", message="Microphone stream started", logger_name="voice")
-    
+
     assert entry.level == "INFO"
     assert entry.message == "Microphone stream started"
     assert entry.logger_name == "voice"

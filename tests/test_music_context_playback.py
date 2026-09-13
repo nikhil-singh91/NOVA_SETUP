@@ -3,25 +3,19 @@
 from __future__ import annotations
 
 import time
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from core.context import RecentInteractionContext, recent_interaction_context
+from browser.models import ActionType, BrowserActionPlan, Platform
+from browser.sites.youtube import YouTubeSkill
+from core.context import RecentInteractionContext
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
 from media.models import (
-    MediaRequest,
-    MediaType,
-    MusicIntent,
-    MusicPreference,
     ShortTermMusicContext,
     VideoCandidate,
 )
 from media.parser import MediaRequestParser
-from media.scorer import MediaMatchScorer
 from media.service import MediaPlaybackService
-from browser.models import ActionType, BrowserActionPlan, BrowserResult, Platform
-from browser.sites.youtube import YouTubeSkill
 from tests.test_browser_actions_v2 import MockBrowserEngineV2
 
 

@@ -6,9 +6,10 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+
 from core.environment import environment_observer
 from core.logger import get_logger
+
 from desktop.safety import DesktopSafetyPolicy
 
 logger = get_logger(__name__)

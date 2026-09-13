@@ -1,7 +1,7 @@
 """Comprehensive automated test suite for NOVA Live User Activity Feed."""
 
 import time
-import pytest
+
 from ui.health_checker import ActivityInteraction, ActivityStep, DashboardStatsManager
 from ui.terminal_dashboard import TerminalDashboard
 

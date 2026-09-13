@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from core.task_agent.models import FailureType, TaskGoal, TaskPlan, TaskStep
+from core.task_agent.models import TaskGoal, TaskPlan, TaskStep
 from main import NovaApplication, TurnRequest
 
 
@@ -120,10 +120,12 @@ def test_full_8_point_task_agent_matrix(tmp_path: Path) -> None:
     # TEST 8: "Create a folder Project" -> "Create main.cpp inside it."
     # =========================================================================
     resp8_1 = run_turn("Create a folder called AlphaProject on Desktop")
+    assert resp8_1
     alpha_dir = desktop_dir / "AlphaProject"
     assert alpha_dir.is_dir()
 
     resp8_2 = run_turn("Now create main.cpp inside it")
+    assert resp8_2
     main_file = alpha_dir / "main.cpp"
     assert main_file.is_file()
     test_records.append({"test": "TEST 8: Cross-Turn Context Resolution", "status": "PASS"})

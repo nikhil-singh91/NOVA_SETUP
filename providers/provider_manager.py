@@ -652,7 +652,7 @@ class ProviderManager:
             except Exception as exc:
                 elapsed = time.monotonic() - start_time
                 status_cat, clean_msg, retry_sec = self._classify_error(exc)
-                
+
                 rt.status = status_cat
                 rt.last_latency_ms = round(elapsed * 1000, 1)
                 rt.last_error = clean_msg

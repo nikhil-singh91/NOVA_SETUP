@@ -13,22 +13,18 @@ Validates:
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from browser.models import ActionType, BrowserActionPlan, BrowserResult
+from browser.sites.generic import GenericSiteSkill
 from core.context import (
-    InteractionTurn,
-    RecentInteractionContext,
     ContextualReferenceResolver,
-    recent_interaction_context,
+    RecentInteractionContext,
 )
-from core.environment import EnvironmentObserver, ContextResolver
+from core.task_agent.registry import capability_registry
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent, StructuredAction
-from browser.models import BrowserActionPlan, ActionType, BrowserResult
-from browser.sites.generic import GenericSiteSkill
 from personality.response_orchestrator import ResponseOrchestrator
-from core.task_agent.registry import capability_registry
 
 
 class TestRecentInteractionContext:
@@ -71,7 +67,7 @@ class TestRecentInteractionContext:
             is_new_tab=True,
         )
         resolver = ContextualReferenceResolver(ctx)
-        
+
         # Test natural follow-up phrases
         for phrase in ("this new tab", "in this tab", "that tab", "current tab", "the one I just opened"):
             resolved = resolver.resolve(phrase)

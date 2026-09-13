@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,8 +10,8 @@ from core.screenshot import ScreenshotResult, ScreenshotService, screenshot_serv
 from core.task_agent.registry import capability_registry
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
-from mac_control.models import CommandCategory, ExecutionStatus, MacCommand
 from mac_control.actions.screenshot import execute_screenshot_command
+from mac_control.models import CommandCategory, ExecutionStatus, MacCommand
 
 
 @pytest.fixture

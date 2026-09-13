@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, patch
 from pathlib import Path
+from unittest.mock import patch
 
+from desktop.editor import DocumentEditor
 from intent.matcher import LinguisticIntentMatcher
 from intent.models import CanonicalIntent
-from mac_control.models import MacCommand, CommandCategory, ExecutionStatus
-from mac_control.actions.volume import get_volume_level, set_volume_level, execute_volume_command
-from mac_control.actions.brightness import get_brightness_level, set_brightness_level, execute_brightness_command
-from mac_control.actions.wifi import get_wifi_status, get_current_ssid, get_wifi_info, execute_wifi_command
-from mac_control.actions.bluetooth import get_bluetooth_status, set_bluetooth_power, execute_bluetooth_command
-from desktop.editor import DocumentEditor
-from desktop.parser import DesktopIntentParser
-from desktop.models import DesktopActionType
+from mac_control.actions.bluetooth import (
+    execute_bluetooth_command,
+)
+from mac_control.actions.brightness import (
+    execute_brightness_command,
+)
+from mac_control.actions.volume import execute_volume_command
+from mac_control.actions.wifi import (
+    execute_wifi_command,
+)
+from mac_control.models import CommandCategory, ExecutionStatus, MacCommand
 
 
 class TestParameterControlAndWriting(unittest.TestCase):

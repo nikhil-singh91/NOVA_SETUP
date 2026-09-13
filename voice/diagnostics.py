@@ -6,9 +6,9 @@ import time
 from typing import Any
 
 import numpy as np
-
 from config.settings import settings
 from core.logger import get_logger
+
 from voice.microphone import MicrophoneManager
 from voice.speaker import SpeakerManager
 from voice.transcriber import TranscriptionManager
@@ -172,7 +172,7 @@ class VoiceDiagnostics:
 
             # Test on a minimal synthetic buffer
             test_audio = np.zeros(16000, dtype=np.float32)  # 1 second of silence
-            res = transcriber.transcribe(test_audio)
+            transcriber.transcribe(test_audio)
             transcriber.shutdown()
 
             self.results["transcriber"] = {

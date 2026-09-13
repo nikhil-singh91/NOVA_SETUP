@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
-from core.environment import environment_observer, log_environment_debug
+from core.environment import environment_observer
 from core.logger import get_logger
+
 from intent.models import CanonicalIntent, StructuredAction
 
 logger = get_logger(__name__)

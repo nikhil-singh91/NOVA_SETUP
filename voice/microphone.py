@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import queue
-import sys
 import threading
-import time
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pyaudio
-
 from core.logger import get_logger
 
 logger = get_logger(__name__)

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import subprocess
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 
 FOLDER_MAP = {
     "desktop": "~/Desktop",
@@ -20,7 +21,7 @@ def execute_finder_command(cmd: MacCommand) -> ExecutionResult:
     """Execute Finder navigation commands."""
     action = cmd.action
     args = cmd.args
-    
+
     try:
         if action == "open_folder":
             folder_key = args.get("folder", "finder").lower().strip()
@@ -60,7 +61,7 @@ def execute_finder_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.FINDER,
                 details={"folder": folder_key, "path": expanded_path}
             )
-            
+
         elif action == "reveal_file":
             file_path = args.get("path", "").strip()
             if not file_path:
@@ -78,7 +79,7 @@ def execute_finder_command(cmd: MacCommand) -> ExecutionResult:
                     command_name="Reveal File",
                     category=CommandCategory.FINDER
                 )
-                
+
             subprocess.run(["open", "-R", expanded_path], check=True)
             return ExecutionResult(
                 status=ExecutionStatus.SUCCESS,
@@ -87,7 +88,7 @@ def execute_finder_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.FINDER,
                 details={"path": expanded_path}
             )
-            
+
     except Exception as exc:
         return ExecutionResult(
             status=ExecutionStatus.FAILED,
@@ -95,7 +96,7 @@ def execute_finder_command(cmd: MacCommand) -> ExecutionResult:
             command_name="Finder Control",
             category=CommandCategory.FINDER
         )
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown Finder action: {action}",

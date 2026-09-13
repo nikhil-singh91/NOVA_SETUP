@@ -51,20 +51,22 @@ import re
 import sys
 import threading
 import time
-from config.settings import settings
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Final
+from typing import Any, Final
 
 import numpy as np
 import torch
+from config.settings import settings
+
 
 class HighPassFilter:
     def __init__(self, alpha: float = 0.98) -> None:
         self.alpha = alpha
         self.prev_x = 0.0
-        
+
     def process(self, frame: np.ndarray) -> np.ndarray:
         shifted = np.empty_like(frame)
         shifted[0] = self.prev_x
@@ -78,18 +80,18 @@ class AutomaticGainControl:
         self.target_rms = target_rms
         self.max_gain = max_gain
         self.current_gain = 1.0
-        
+
     def process(self, frame: np.ndarray) -> np.ndarray:
         rms = np.sqrt(np.mean(frame ** 2)) + 1e-6
         is_clipping = np.any(np.abs(frame) > 0.98)
-        
+
         if is_clipping:
             target_gain = 0.5 * self.current_gain
             self.current_gain = 0.7 * self.current_gain + 0.3 * target_gain
         else:
             target_gain = self.target_rms / rms
             self.current_gain = 0.95 * self.current_gain + 0.05 * target_gain
-            
+
         self.current_gain = max(0.2, min(self.max_gain, self.current_gain))
         return frame * self.current_gain
 
@@ -100,12 +102,12 @@ class SpectralNoiseSuppressor:
         self.alpha = 2.0
         self.beta = 0.03
         self.frames_seen = 0
-        
+
     def process(self, frame: np.ndarray) -> np.ndarray:
         spec = np.fft.rfft(frame)
         mag = np.abs(spec)
         phase = np.angle(spec)
-        
+
         if self.noise_profile is None:
             self.noise_profile = mag
         else:
@@ -113,20 +115,20 @@ class SpectralNoiseSuppressor:
                 self.noise_profile = 0.8 * self.noise_profile + 0.2 * mag
             else:
                 self.noise_profile = 0.995 * self.noise_profile + 0.005 * mag
-                
+
         self.frames_seen += 1
-        
+
         subtracted = mag - self.alpha * self.noise_profile
         subtracted = np.maximum(subtracted, self.beta * mag)
-        
+
         clean_spec = subtracted * np.exp(1j * phase)
         clean_frame = np.fft.irfft(clean_spec)
-        
+
         if len(clean_frame) < len(frame):
             clean_frame = np.pad(clean_frame, (0, len(frame) - len(clean_frame)))
         elif len(clean_frame) > len(frame):
             clean_frame = clean_frame[:len(frame)]
-            
+
         return clean_frame
 
 
@@ -136,20 +138,20 @@ class AcousticEchoCanceller:
         self.mu = mu
         self.weights = np.zeros(length)
         self.history = np.zeros(length)
-        
+
     def process(self, mic_frame: np.ndarray, ref_frame: np.ndarray | None = None) -> np.ndarray:
         if ref_frame is None or np.all(ref_frame == 0.0):
             return mic_frame
-            
+
         out = np.zeros_like(mic_frame)
         for i in range(len(mic_frame)):
             self.history[1:] = self.history[:-1]
             self.history[0] = ref_frame[i] if i < len(ref_frame) else 0.0
-            
+
             echo_est = np.dot(self.weights, self.history)
             error = mic_frame[i] - echo_est
             out[i] = error
-            
+
             self.weights += 2 * self.mu * error * self.history
         return out
 
@@ -168,9 +170,9 @@ except ImportError:
     WhisperModel = None
     _FASTER_WHISPER_AVAILABLE = False
 
-from voice.audio_processor import preprocess_audio
 from core.exceptions import SpeechRecognitionError
 from core.logger import get_logger
+from voice.audio_processor import preprocess_audio
 
 logger = get_logger(__name__)
 
@@ -430,7 +432,7 @@ class RecognitionResult:
             language=language,
             duration_seconds=duration_seconds,
             engine_name=engine_name,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             error_message=None,
         )
 
@@ -468,7 +470,7 @@ class RecognitionResult:
             language=language,
             duration_seconds=duration_seconds,
             engine_name=engine_name,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             error_message=error_message,
         )
 
@@ -476,23 +478,23 @@ class RecognitionResult:
 def _detect_text_language(text: str, whisper_lang: str | None) -> str:
     """Classify the transcribed text as English, Hindi, or Hinglish."""
     text_lower = text.lower()
-    
+
     # Common Hinglish/Hindi words in Latin script
     hinglish_words = {
-        "kholo", "karo", "chaloo", "kaisa", "hai", "aaj", "mujhe", "padhna", "kya", 
-        "kar", "rahe", "ho", "bhi", "aur", "pe", "se", "ko", "par", "ek", "do", "teen", 
-        "kuch", "sath", "saath", "kaam", "karna", "ya", "phir", "uske", "tumne", "mera", 
+        "kholo", "karo", "chaloo", "kaisa", "hai", "aaj", "mujhe", "padhna", "kya",
+        "kar", "rahe", "ho", "bhi", "aur", "pe", "se", "ko", "par", "ek", "do", "teen",
+        "kuch", "sath", "saath", "kaam", "karna", "ya", "phir", "uske", "tumne", "mera",
         "suno", "sun", "raha", "hoon", "tumhara", "tackle", "bata", "sakte", "chahiye",
         "ki", "apne", "apna", "apni", "hume", "hamesha", "yahan", "wahan", "kaise", "kab",
-        "kyun", "kyon", "kuch", "baat", "discuss", "integrate", "karke", "chalega", "na"
+        "kyun", "kyon", "baat", "discuss", "integrate", "karke", "chalega", "na"
     }
-    
+
     has_devanagari = bool(re.search(r"[\u0900-\u097F]", text))
     has_latin = bool(re.search(r"[a-zA-Z]", text))
-    
+
     words = set(re.findall(r"[a-zA-Z]+", text_lower))
     has_hinglish_words = not words.isdisjoint(hinglish_words)
-    
+
     if has_devanagari and has_latin:
         return "Hinglish"
     elif has_devanagari:
@@ -510,7 +512,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
         return levenshtein_similarity(s2, s1)
     if len(s2) == 0:
         return 0.0
-    
+
     previous_row = range(len(s2) + 1)
     for i, c1 in enumerate(s1):
         current_row = [i + 1]
@@ -520,7 +522,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
             substitutions = previous_row[j] + (c1 != c2)
             current_row.append(min(insertions, deletions, substitutions))
         previous_row = current_row
-        
+
     distance = previous_row[-1]
     max_len = max(len(s1), len(s2))
     return (max_len - distance) / max_len
@@ -574,7 +576,7 @@ def load_speech_corrections() -> dict[str, str]:
     if path.exists():
         try:
             import json
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -583,8 +585,9 @@ def load_speech_corrections() -> dict[str, str]:
 
 def save_speech_correction(raw_input: str, corrected_command: str) -> None:
     """Save a corrected speech mapping to memory/speech_corrections.json."""
-    from core.paths import MEMORY_DIR
     import json
+
+    from core.paths import MEMORY_DIR
     path = MEMORY_DIR / "speech_corrections.json"
     corrections = load_speech_corrections()
     corrections[raw_input.lower().strip()] = corrected_command
@@ -601,7 +604,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
     """Fuzzy correct transcription input. Returns (corrected_text, transcript_conf, intent_conf)."""
     original = text
     text_lower = text.lower().strip()
-    
+
     # 1. Check self-learned corrections first
     corrections = load_speech_corrections()
     if text_lower in corrections:
@@ -645,14 +648,14 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
     # 4. Fuzzy Matching on command dataset
     best_match = None
     best_score = 0.0
-    
+
     for cmd in COMMON_COMMANDS:
         score = levenshtein_similarity(text_lower, cmd.lower())
-        
+
         # Sub-word intersection or containment boosts
         if cmd.lower() in text_lower:
             score = max(score, 0.85)
-            
+
         # Semantic mapping aliases
         if "sound" in text_lower or "audio" in text_lower or "volume" in text_lower:
             if any(act in text_lower for act in ["increase", "raise", "up", "loud"]):
@@ -661,7 +664,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
             elif any(act in text_lower for act in ["decrease", "lower", "down", "kam"]):
                 if cmd == "Decrease Volume":
                     score = max(score, 0.90)
-                    
+
         if "brightness" in text_lower:
             if any(act in text_lower for act in ["increase", "raise", "up"]):
                 if cmd == "Increase Brightness":
@@ -673,7 +676,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
         if "download" in text_lower:
             if cmd == "Open Downloads":
                 score = max(score, 0.88)
-                
+
         if "shut down" in text_lower or "turn off" in text_lower:
             if cmd == "Shutdown Mac":
                 score = max(score, 0.90)
@@ -689,7 +692,7 @@ def correct_transcription_intent(text: str) -> tuple[str, float, float]:
         return best_match, 85.0, best_score * 100.0
     if best_match:
         return best_match, 55.0, best_score * 100.0
-        
+
     return original, 95.0, 0.0
 
 
@@ -856,7 +859,7 @@ class BaseSpeechRecognizer:
                     "[%s] shutdown() called but not initialized.", self.engine_name
                 )
                 return
-            
+
 
             logger.info("[%s] Shutting down speech recognizer.", self.engine_name)
             try:
@@ -1048,14 +1051,14 @@ class BaseSpeechRecognizer:
 
 class MicrophoneStream:
     """Continuous thread-safe background PyAudio recording stream (Singleton)."""
-    
+
     _instance = None
     _instance_lock = threading.Lock()
-    
+
     def __new__(cls, *args, **kwargs):
         with cls._instance_lock:
             if cls._instance is None:
-                cls._instance = super(MicrophoneStream, cls).__new__(cls)
+                cls._instance = super().__new__(cls)
                 cls._instance._initialized = False
             return cls._instance
 
@@ -1082,7 +1085,7 @@ class MicrophoneStream:
                 return
             import pyaudio
             self._pyaudio = pyaudio.PyAudio()
-            
+
             # Automate device selection
             target_index = self.device_index
             if target_index is None:
@@ -1091,7 +1094,7 @@ class MicrophoneStream:
                     default_idx = default_device.get('index')
                 except Exception:
                     default_idx = None
-                
+
                 macbook_mic_idx = None
                 try:
                     info = self._pyaudio.get_host_api_info_by_index(0)
@@ -1108,7 +1111,7 @@ class MicrophoneStream:
                             continue
                 except Exception:
                     pass
-                
+
                 target_index = macbook_mic_idx if macbook_mic_idx is not None else default_idx
 
             try:
@@ -1122,7 +1125,7 @@ class MicrophoneStream:
                     dev_name = "Default Microphone"
                     dev_sr = self.sample_rate
                     dev_latency = 0.09
-                
+
                 logger.debug("Selected Microphone: %s", dev_name)
                 logger.debug("Sample Rate: %d Hz (Device native: %d Hz)", self.sample_rate, dev_sr)
                 logger.debug("Channels: 1")
@@ -1141,7 +1144,7 @@ class MicrophoneStream:
             except Exception as exc:
                 err_msg = str(exc)
                 friendly_msg = f"Failed to open microphone: {exc}"
-                
+
                 # Detect permission issues on macOS
                 if "permission" in err_msg.lower() or "privilege" in err_msg.lower() or "unanticipated host error" in err_msg.lower():
                     friendly_msg = (
@@ -1154,12 +1157,12 @@ class MicrophoneStream:
                         "No microphone found or selected device index is invalid.\n"
                         "👉 Suggestion: Verify your microphone is connected and listed in system sound settings."
                     )
-                
+
                 print(f"\n❌ {friendly_msg}\n")
                 sys.stdout.flush()
                 self._active_owners.clear()
                 raise MicrophoneUnavailableError(friendly_msg) from exc
-                
+
             self._running = True
             self._queue = queue.Queue()
             self._thread = threading.Thread(target=self._record_loop, daemon=True, name="nova-mic-recorder")
@@ -1170,7 +1173,7 @@ class MicrophoneStream:
         logger.info("[DEBUG] reinitialize() requested.")
         with self._lock:
             self._running = False
-            
+
         # Join the thread first to stop any reads!
         if self._thread:
             logger.info("[DEBUG] Joining recording thread in reinitialize...")
@@ -1179,7 +1182,7 @@ class MicrophoneStream:
             except Exception as e:
                 logger.warning("Error joining thread: %s", e)
             self._thread = None
-            
+
         with self._lock:
             # Now close the stream safely
             if self._stream:
@@ -1191,7 +1194,7 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error closing stream in reinitialize: %s", e)
                 self._stream = None
-                
+
             if self._pyaudio:
                 try:
                     self._pyaudio.terminate()
@@ -1199,15 +1202,15 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error terminating PyAudio in reinitialize: %s", e)
                 self._pyaudio = None
-                
+
             # Clear ownership and queue
             self._active_owners.clear()
             self._queue = queue.Queue()
-            
+
             # 6. Open fresh PyAudio instance and stream
             import pyaudio
             self._pyaudio = pyaudio.PyAudio()
-            
+
             target_index = self.device_index
             if target_index is None:
                 try:
@@ -1215,7 +1218,7 @@ class MicrophoneStream:
                     default_idx = default_device.get('index')
                 except Exception:
                     default_idx = None
-                
+
                 macbook_mic_idx = None
                 try:
                     info = self._pyaudio.get_host_api_info_by_index(0)
@@ -1247,7 +1250,7 @@ class MicrophoneStream:
             except Exception as exc:
                 logger.error("Failed to open fresh stream: %s", exc)
                 raise MicrophoneUnavailableError(f"Failed to open fresh stream: {exc}") from exc
-                
+
             self._running = True
             self._thread = threading.Thread(target=self._record_loop, daemon=True, name="nova-mic-recorder")
             self._thread.start()
@@ -1263,9 +1266,9 @@ class MicrophoneStream:
                 except Exception:
                     pass
                 self._stream = None
-                
+
             time.sleep(1.0)
-            
+
             try:
                 target_index = self.device_index
                 if target_index is None:
@@ -1274,7 +1277,7 @@ class MicrophoneStream:
                         default_idx = default_device.get('index')
                     except Exception:
                         default_idx = None
-                    
+
                     macbook_mic_idx = None
                     try:
                         info = self._pyaudio.get_host_api_info_by_index(0)
@@ -1310,10 +1313,10 @@ class MicrophoneStream:
     def _record_loop(self) -> None:
         thread_id = threading.get_ident()
         logger.info("[DEBUG] [Thread-%d] Microphone recording thread started.", thread_id)
-        
+
         frames_logged = False
         consecutive_errors = 0
-        
+
         while True:
             # 1. Thread-safe state checks under lock
             with self._lock:
@@ -1323,30 +1326,30 @@ class MicrophoneStream:
                 if self._stream is None:
                     logger.info("[DEBUG] [Thread-%d] self._stream is None. Exiting loop.", thread_id)
                     break
-                
+
                 # Check active speaking
                 import voice.text_to_speech
                 if self._stream.is_stopped() or voice.text_to_speech.is_speaking:
                     time.sleep(0.02)
                     continue
-                    
+
                 # Store local reference of stream for safe invocation
                 active_stream = self._stream
                 active_pyaudio = self._pyaudio
                 stream_id = id(active_stream)
-                
+
             try:
                 # 2. Read audio frame under lock to prevent use-after-free
                 with self._lock:
                     if not self._running or self._stream != active_stream:
                         break
                     data = active_stream.read(self.chunk_size, exception_on_overflow=False)
-                    
+
                 if data:
                     if not frames_logged:
                         logger.info("[DEBUG] [Thread-%d] [Stream-%d] First audio frame read successfully.", thread_id, stream_id)
                         frames_logged = True
-                        
+
                     # Queue update
                     if self._queue.qsize() > 100:
                         try:
@@ -1359,7 +1362,7 @@ class MicrophoneStream:
                 consecutive_errors += 1
                 if consecutive_errors == 1:
                     logger.warning("[DEBUG] [Thread-%d] Microphone stream read error: %s", thread_id, exc)
-                
+
                 # Attempt to reconnect after consecutive errors
                 if consecutive_errors >= 3:
                     success = self._reconnect_stream()
@@ -1369,7 +1372,7 @@ class MicrophoneStream:
                         consecutive_errors = 0
                 else:
                     time.sleep(0.05)
-                    
+
         logger.info("[DEBUG] [Thread-%d] Microphone recording thread exited cleanly.", thread_id)
 
     def read_chunk(self, timeout: float = 0.1, owner: str = "default") -> bytes | None:
@@ -1377,7 +1380,7 @@ class MicrophoneStream:
         if voice.text_to_speech.is_speaking and owner == "recognizer":
             self.clear_queue()
             return None
-            
+
         try:
             return self._queue.get(timeout=timeout)
         except queue.Empty:
@@ -1396,9 +1399,9 @@ class MicrophoneStream:
             self._active_owners.discard(owner)
             if self._active_owners:
                 return # Keep running
-                
+
             self._running = False
-            
+
         # Join thread outside lock to avoid deadlocks, but BEFORE closing stream pointers
         if self._thread:
             logger.info("[DEBUG] Joining recording thread in stop...")
@@ -1407,7 +1410,7 @@ class MicrophoneStream:
             except Exception as e:
                 logger.warning("Error joining thread: %s", e)
             self._thread = None
-            
+
         with self._lock:
             if self._stream:
                 stream_id = id(self._stream)
@@ -1418,7 +1421,7 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error closing stream: %s", e)
                 self._stream = None
-                
+
             if self._pyaudio:
                 try:
                     self._pyaudio.terminate()
@@ -1461,7 +1464,7 @@ class MicrophoneStream:
         with self._lock:
             self._active_owners.clear()
             self._running = False
-            
+
         if self._thread:
             logger.info("[DEBUG] Joining recording thread in force_stop...")
             try:
@@ -1469,7 +1472,7 @@ class MicrophoneStream:
             except Exception as e:
                 logger.warning("Error joining thread: %s", e)
             self._thread = None
-            
+
         with self._lock:
             if self._stream:
                 stream_id = id(self._stream)
@@ -1480,7 +1483,7 @@ class MicrophoneStream:
                 except Exception as e:
                     logger.warning("Error closing stream: %s", e)
                 self._stream = None
-                
+
             if self._pyaudio:
                 try:
                     self._pyaudio.terminate()
@@ -1498,18 +1501,18 @@ class AudioVAD:
         self.sample_rate = sample_rate
         self.threshold = 0.45
         self.is_speech_active = False
-        
+
         # Detect unit test environment
         import sys
         is_unit_test = "test_voice_system" in sys.argv[0] or "pytest" in sys.argv[0]
-        
+
         if is_unit_test:
             self.speech_frames_threshold = 7
             self.silence_frames_threshold = 16
         else:
             self.speech_frames_threshold = 4
             self.silence_frames_threshold = int(1000 / frame_duration_ms)
-            
+
         self.silence_counter = 0
         self.speech_counter = 0
 
@@ -1572,24 +1575,24 @@ class AudioVAD:
             if not hasattr(self, "noise_floor"):
                 self.noise_floor = 0.005
                 self.max_energy = 0.05
-                
+
             if rms < self.noise_floor:
                 self.noise_floor = 0.95 * self.noise_floor + 0.05 * rms
             else:
                 self.noise_floor = 0.999 * self.noise_floor + 0.001 * rms
             self.noise_floor = max(0.001, self.noise_floor)
-            
+
             if rms > self.max_energy:
                 self.max_energy = 0.90 * self.max_energy + 0.10 * rms
             else:
                 self.max_energy = 0.999 * self.max_energy + 0.001 * rms
             self.max_energy = max(self.noise_floor * 2.0, self.max_energy)
-            
+
             start_threshold = self.noise_floor + (self.max_energy - self.noise_floor) * 0.15
             start_threshold = max(self.noise_floor + 0.003, start_threshold)
             stop_threshold = self.noise_floor + (self.max_energy - self.noise_floor) * 0.05
             stop_threshold = max(self.noise_floor + 0.001, stop_threshold)
-            
+
             if not self.is_speech_active:
                 if rms > start_threshold:
                     self.speech_counter += 1
@@ -1619,10 +1622,10 @@ class AudioVAD:
                     input_frame = np.pad(clean_frame, (0, pad_len))
                 else:
                     input_frame = clean_frame
-                
+
                 tensor_chunk = torch.from_numpy(input_frame.astype(np.float32)).unsqueeze(0)
                 speech_prob = self.model(tensor_chunk, self.sample_rate).item()
-            except Exception as e:
+            except Exception:
                 rms = np.sqrt(np.mean(clean_frame ** 2))
                 speech_prob = 1.0 if rms > 0.015 else 0.0
         else:
@@ -1635,18 +1638,18 @@ class AudioVAD:
             rms_val = np.sqrt(np.mean(clean_frame ** 2))
             noise_floor_est = getattr(self.sns, "noise_profile", None)
             noise_rms = np.sqrt(np.mean(noise_floor_est ** 2)) if noise_floor_est is not None else 0.003
-            
+
             # Estimated SNR in dB
             snr = 20 * np.log10(rms_val / (noise_rms + 1e-6))
             snr = max(-10.0, min(50.0, snr))
-            
+
             # Update metrics live
             DashboardStatsManager.update("audio_level", int(min(1.0, rms_val * 6.0) * 100))
             DashboardStatsManager.update("noise_level", int(min(1.0, noise_rms * 6.0) * 100))
             DashboardStatsManager.update("speech_confidence", f"{speech_prob * 100:.0f}%")
             DashboardStatsManager.update("estimated_snr", f"{snr:.1f} dB")
             DashboardStatsManager.update("mic_gain", f"{getattr(self.agc, 'current_gain', 1.0):.2f}x")
-            
+
             # Update quality reason in real time
             qual_info = self.get_quality_score()
             DashboardStatsManager.update("current_audio_state", qual_info["reason"])
@@ -1684,7 +1687,7 @@ class AudioVAD:
         """Compute speech metrics and diagnostics for the current recording session."""
         mean_prob = np.mean(self.last_probs) if self.last_probs else 0.0
         confidence = mean_prob * 100.0
-        
+
         # Estimate noise vs signal level
         noise_level = 10.0
         snr = 15.0
@@ -1692,7 +1695,7 @@ class AudioVAD:
             quality = max(0.0, min(100.0, confidence * 1.2))
         else:
             quality = 0.0
-            
+
         reason = "Clean Signal"
         if not self.last_probs:
             reason = "No Speech Detected"
@@ -1702,7 +1705,7 @@ class AudioVAD:
             reason = "Low Speech Volume"
         elif mean_prob < 0.4:
             reason = "Far Microphone"
-            
+
         return {
             "confidence": confidence,
             "quality": quality,
@@ -1722,7 +1725,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         self._model: Any = None
         self._mic_stream: MicrophoneStream | None = None
         self._live_transcribe_thread: threading.Thread | None = None
-        
+
         # Build initial prompt to feed custom vocabulary bias and accent styles to the model (Hinglish/Indian accents)
         self._initial_prompt_str = (
             "Nikhil, Boss, NOVA, listen, VS Code kholo, system volume increase karo, browser open karo. "
@@ -1739,15 +1742,15 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             raise EngineUnavailableError("The 'faster-whisper' package is required.")
         if not _PYAUDIO_AVAILABLE:
             raise EngineUnavailableError("The 'pyaudio' package is required.")
-            
+
         # Determine model name from environment or config settings
         import os
         model_name = self._config.model_name or os.environ.get("WHISPER_MODEL_NAME") or "small"
-        
+
         # Prevent silent fallback to tiny
         if model_name == "tiny" and (self._config.model_name != "tiny" and os.environ.get("WHISPER_MODEL_NAME") != "tiny"):
             model_name = "small"
-            
+
         try:
             # Check local availability to decide if we need to print download warning
             from faster_whisper.utils import download_model
@@ -1757,7 +1760,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 model_exists = True
             except Exception:
                 model_exists = False
-                
+
             if model_exists:
                 print(f"✓ Loading local speech model '{model_name}'...")
             else:
@@ -1767,22 +1770,23 @@ class WhisperRecognizer(BaseSpeechRecognizer):
 
             # Automatic optimization for Apple Silicon M1/M2 CPU
             import platform
+
             import torch
-            
+
             is_apple_silicon = (platform.system() == "Darwin" and platform.machine() == "arm64")
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            
+
             # Compute type preferences order
             if device == "cuda":
                 compute_types = ["float16", "int8_float16", "float32"]
             else:
                 # Prefer int8 on Apple Silicon or standard x86 CPU for speed and memory efficiency
                 compute_types = ["int8", "float32"]
-                
+
             self._model = None
             loaded_compute_type = None
             last_err = None
-            
+
             for ct in compute_types:
                 try:
                     logger.info("[%s] Attempting to load model '%s' on %s with compute_type '%s'...", self.engine_name, model_name, device, ct)
@@ -1796,7 +1800,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 except Exception as e:
                     logger.warning("[%s] Failed compute_type '%s': %s", self.engine_name, ct, e)
                     last_err = e
-                    
+
             if self._model is None:
                 # Absolute baseline fallback
                 try:
@@ -1814,7 +1818,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         except Exception as exc:
             err_msg = str(exc)
             friendly_msg = f"Whisper initialization failed: {exc}"
-            
+
             if "pickle" in err_msg.lower() or "corrupt" in err_msg.lower() or "eof" in err_msg.lower() or "too short" in err_msg.lower() or "magic number" in err_msg.lower():
                 friendly_msg = (
                     f"Whisper Model Cache Corruption Detected.\n"
@@ -1823,11 +1827,11 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 )
             elif "connection" in err_msg.lower() or "dns" in err_msg.lower() or "network" in err_msg.lower() or "offline" in err_msg.lower():
                 friendly_msg = (
-                    f"Network Connection Failed during model download.\n"
-                    f"👉 Suggestion: Please check your internet connection. A first-time startup\n"
-                    f"   requires an active internet connection to download the speech model from huggingface.co."
+                    "Network Connection Failed during model download.\n"
+                    "👉 Suggestion: Please check your internet connection. A first-time startup\n"
+                    "   requires an active internet connection to download the speech model from huggingface.co."
                 )
-            
+
             print(f"\n❌ {friendly_msg}\n")
             sys.stdout.flush()
             raise SpeechRecognitionError(friendly_msg) from exc
@@ -1841,7 +1845,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             self._mic_stream.start("system_daemon")
         except Exception as e:
             logger.warning("Failed to start persistent microphone daemon: %s", e)
-        
+
         # Retrieve active microphone name for the summary log
         import pyaudio as pa_module
         try:
@@ -1868,7 +1872,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             lang_str = "English"
         elif self._config.language == Language.HINDI:
             lang_str = "Hindi"
-            
+
         print("\n✓ Speech engine initialized")
         print(f"✓ Model: {model_name}")
         print(f"✓ Language: {lang_str}")
@@ -1876,7 +1880,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         print(f"✓ Compute: {loaded_compute_type}")
         print(f"✓ Microphone: {mic_name}\n")
         sys.stdout.flush()
-        
+
         # Start background watchdog monitoring thread
         self._watchdog_running = True
         self._watchdog_thread = threading.Thread(
@@ -1907,13 +1911,13 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             time.sleep(2.0)
             if not self._mic_stream:
                 continue
-                
+
             mic = self._mic_stream
-            
+
             # Check thread health
             thread_alive = mic._thread is not None and mic._thread.is_alive()
             mic_running = mic._running
-            
+
             # If the microphone stream is logically running, but the background recording thread is dead:
             if mic_running and not thread_alive:
                 logger.warning("Watchdog detected dead recording thread. Attempting automatic recovery...")
@@ -1925,7 +1929,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     logger.info("Watchdog recovered microphone thread successfully.")
                 except Exception as e:
                     logger.error("Watchdog failed to recover microphone thread: %s", e)
-            
+
             # Update DashboardStatsManager with current status
             try:
                 from ui.health_checker import DashboardStatsManager
@@ -1935,7 +1939,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         mic_state = "MUTED" if mic._stream.is_stopped() else "ON"
                     except Exception:
                         pass
-                
+
                 DashboardStatsManager.update("mic_state", mic_state)
                 DashboardStatsManager.update("recorder_state", "RUNNING" if thread_alive else "STOPPED")
                 DashboardStatsManager.update("thread_health", "HEALTHY" if (thread_alive and mic_running) else "DEGRADED")
@@ -1946,41 +1950,41 @@ class WhisperRecognizer(BaseSpeechRecognizer):
     def _do_listen_once(self) -> RecognitionResult:
         if not self._mic_stream:
             raise SpeechRecognitionError("Recognizer is not initialized.")
-            
+
         # 1. Wait for active TTS playback to finish
         import voice.text_to_speech
         while voice.text_to_speech.is_speaking:
             time.sleep(0.05)
-            
+
         # 2. Wait an additional 500 ms after speech completes
         time.sleep(0.5)
-        
+
         # 3. Destroy old stream and initialize fresh mic session before recording
         try:
             self._mic_stream.reinitialize()
         except Exception as e:
             logger.warning("Mic reinitialization failed, proceeding with fallback: %s", e)
-            
+
         # 4. Flush the microphone input buffer before recording and resume hardware streaming
         self._mic_stream.clear_queue()
         self._mic_stream.resume_recording()
-        
+
         # 5. Only then start the Whisper recording
         self._mic_stream.start("recognizer")
         self._mic_stream.clear_queue()
-        
+
         start_time = time.monotonic()
-            
+
         try:
             vad = AudioVAD(sample_rate=16000, frame_duration_ms=30)
             audio_buffer = bytearray()
-            
+
             timeout = self._config.timeout_seconds or 5.0
             phrase_limit = self._config.phrase_time_limit_seconds or 15.0
-            
+
             speech_started = False
             last_live_update = 0.0
-            
+
             # Clean print block start
             if self._is_interactive:
                 print("====================================================")
@@ -1988,7 +1992,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 print("Speak now...")
                 print("====================================================")
                 sys.stdout.flush()
-                
+
             while True:
                 elapsed = time.monotonic() - start_time
                 if not speech_started and elapsed > timeout:
@@ -2002,24 +2006,24 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         engine_name=self.engine_name,
                         error_message="No speech detected within configured timeout."
                     )
-                    
+
                 if speech_started and elapsed > phrase_limit:
                     break
-                    
+
                 chunk = self._mic_stream.read_chunk(timeout=0.05, owner="recognizer")
                 if not chunk:
                     time.sleep(0.01)
                     continue
-                    
+
                 audio_buffer.extend(chunk)
-                
+
                 # Run VAD checks
                 frame_int16 = np.frombuffer(chunk, dtype=np.int16)
                 frame_float32 = frame_int16.astype(np.float32) / 32768.0
-                
+
                 rms = np.sqrt(np.mean(frame_float32 ** 2))
                 is_speech = vad.process_frame(frame_float32)
-                
+
                 # Live status bar update
                 if self._is_interactive:
                     mic_status = "YES" if speech_started else "NO"
@@ -2029,27 +2033,27 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         f"Rec Time: {elapsed:.1f}s | Silence Timer: {sil_time:.2f}s]"
                     )
                     sys.stdout.flush()
-                
+
                 if is_speech and not speech_started:
                     speech_started = True
                     # Prepend pre-speech rolling history (500 ms) to avoid first-word cutoffs!
                     pre_speech_bytes = b"".join(vad.history_buffer)
                     audio_buffer = bytearray(pre_speech_bytes) + audio_buffer
-                    
+
                     if self._is_interactive:
                         sys.stdout.write("\n👤 YOU: \n")
                         sys.stdout.flush()
-                        
+
                 if speech_started:
                     now = time.monotonic()
                     if now - last_live_update > 0.35:
                         last_live_update = now
                         self._run_live_transcribe(bytes(audio_buffer))
-                        
+
                 if speech_started and not is_speech:
                     # Speech ended naturally (1000 ms silence)
                     break
-                    
+
             if self._is_interactive:
                 sys.stdout.write("\n")
                 sys.stdout.flush()
@@ -2064,7 +2068,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         print("🎤 Transcribing...")
         sys.stdout.flush()
         logger.info("[DEBUG] [Thread-%d] Transcription started.", threading.get_ident())
-        
+
         # Compute Voice Quality Score and validate
         quality_score = vad.get_quality_score()
         if quality_score["reason"] == "No Speech Detected" or quality_score["confidence"] < 15.0:
@@ -2090,7 +2094,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 engine_name=self.engine_name,
                 error_message="No audio captured."
             )
-            
+
         # Final high-quality transcription pass
         try:
             # Helper to calculate average word confidence probabilities
@@ -2124,22 +2128,22 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 log_prob_threshold=-1.0,
                 word_timestamps=True
             )
-            
+
             segments_1 = list(segments_1)
             valid_segments_1 = []
             for seg in segments_1:
                 if seg.no_speech_prob > 0.6 or seg.avg_logprob < -1.0 or seg.compression_ratio > 2.4:
                     continue
                 valid_segments_1.append(seg)
-                
+
             text_1 = " ".join(seg.text for seg in valid_segments_1).strip()
             conf_1 = get_transcription_confidence(valid_segments_1) if valid_segments_1 else 0.0
-            
+
             final_text = text_1
             final_segments = valid_segments_1
             final_conf = conf_1
             pass_used = 1
-            
+
             # If Pass 1 confidence < 85%, run Pass 2
             if conf_1 < 0.85:
                 logger.info("Pass 1 confidence (%.1f%%) < 85%%. Running Whisper Pass 2...", conf_1 * 100)
@@ -2165,10 +2169,10 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     if seg.no_speech_prob > 0.6 or seg.avg_logprob < -1.0 or seg.compression_ratio > 2.4:
                         continue
                     valid_segments_2.append(seg)
-                    
+
                 text_2 = " ".join(seg.text for seg in valid_segments_2).strip()
                 conf_2 = get_transcription_confidence(valid_segments_2) if valid_segments_2 else 0.0
-                
+
                 logger.info("Pass 2 confidence: %.1f%%", conf_2 * 100)
                 if conf_2 > conf_1:
                     logger.info("Choosing Pass 2 hypothesis (%.1f%% > %.1f%%)", conf_2 * 100, conf_1 * 100)
@@ -2184,7 +2188,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
             segments = final_segments
             confidence = final_conf
             confidence_percentage = int(confidence * 100)
-            
+
             # Validation Filters
             if not text:
                 print("Rejected Reason: Silence (No speech transcribed).")
@@ -2201,7 +2205,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     engine_name=self.engine_name,
                     error_message="Speech not transcribed."
                 )
-                
+
             clean_text = re.sub(r'[^\w\s]', '', text).strip()
             if not clean_text:
                 print("Rejected Reason: Only punctuation.")
@@ -2218,7 +2222,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     engine_name=self.engine_name,
                     error_message="Speech consisted only of punctuation."
                 )
-                
+
             words = text.split()
             if len(words) > 4:
                 unique_words = set(words)
@@ -2237,7 +2241,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                         engine_name=self.engine_name,
                         error_message="Repeated word sequence detected."
                     )
-            
+
             # Expose parameters to DashboardStatsManager
             try:
                 from ui.health_checker import DashboardStatsManager
@@ -2247,21 +2251,21 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 DashboardStatsManager.update("rejection_reason", "None")
             except Exception:
                 pass
-                
+
             # Info variables derived from final chosen pass
             info = info_1 if pass_used == 1 else info_2
-                
+
             # Detect language classifications
             detected_code = info.language
             language_desc = "English" if detected_code == "en" else "Hindi"
-            
+
             # Hinglish blend detection heuristics
             is_hindi_script = bool(re.search(r"[\u0900-\u097F]", text))
             has_hinglish_keywords = any(w in text.lower() for w in [
                 "kholo", "karo", "chalao", "bajao", "badhao", "kam", "ji", "kardo", "setup",
                 "open", "launch", "volume", "whatsapp", "github", "chrome", "safari"
             ])
-            
+
             if is_hindi_script or detected_code == "hi":
                 if any(w in text.lower() for w in ["vs code", "vscode", "chrome", "safari", "github", "python", "terminal", "mac", "browser", "whatsapp", "volume"]):
                     language_desc = "Hinglish"
@@ -2271,14 +2275,14 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 # If classified as English by Whisper, but contains Hinglish markers
                 if any(hw in text.lower() for hw in ["kholo", "karo", "chalao", "bajao", "badhao", "kam"]):
                     language_desc = "Hinglish"
-                    
+
             # Final output update
             if self._is_interactive:
                 sys.stdout.write("\r\033[K====================================================\n")
                 sys.stdout.write(f"👤 YOU\n{text}\n")
                 sys.stdout.write("====================================================\n\n")
                 sys.stdout.flush()
-                
+
             logger.info("[DEBUG] [Thread-%d] Transcription finished.", threading.get_ident())
             return RecognitionResult.success_result(
                 text=text,
@@ -2287,7 +2291,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                 duration_seconds=time.monotonic() - start_time,
                 engine_name=self.engine_name
             )
-            
+
         except Exception as exc:
             logger.error("Transcription execution failed: %s", exc, exc_info=True)
             print(f"❌ FAILURE: Transcription error: {exc}")
@@ -2304,7 +2308,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
         """Run non-blocking live update segments transcription in a background thread."""
         if self._live_transcribe_thread and self._live_transcribe_thread.is_alive():
             return
-            
+
         def _job():
             try:
                 enhanced = preprocess_audio(audio_data, sample_rate=16000)
@@ -2325,7 +2329,7 @@ class WhisperRecognizer(BaseSpeechRecognizer):
                     sys.stdout.flush()
             except Exception:
                 pass
-                
+
         self._live_transcribe_thread = threading.Thread(target=_job, daemon=True, name="nova-live-transcriber")
         self._live_transcribe_thread.start()
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -105,7 +105,7 @@ class ScreenSnapshot:
     """Represents an instantaneous on-demand snapshot of the active screen or window."""
 
     snapshot_id: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     image_path: Path | None = None
     screen_width: int = 1470
     screen_height: int = 956
@@ -117,7 +117,7 @@ class ScreenSnapshot:
     @property
     def age_seconds(self) -> float:
         """Seconds elapsed since this snapshot was captured."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return (now - self.timestamp).total_seconds()
 
     def is_fresh(self, max_age_seconds: float = 5.0) -> bool:

@@ -8,10 +8,8 @@ without breaking meaningful entity tokens.
 from __future__ import annotations
 
 import pytest
-
 from intent.engine import NaturalLanguageIntentEngine
 from intent.models import CanonicalIntent
-from intent.normalizer import TextNormalizer
 
 
 @pytest.fixture

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import subprocess
 import urllib.parse
-from mac_control.models import ExecutionResult, ExecutionStatus, CommandCategory, MacCommand
+
+from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
 
 WEBSITE_MAP = {
     "github": "https://github.com",
@@ -23,19 +24,19 @@ def execute_browser_command(cmd: MacCommand) -> ExecutionResult:
     """Execute web browser navigation and query search commands."""
     action = cmd.action
     args = cmd.args
-    
+
     try:
         if action == "open_website":
             site = args.get("site", "").lower().strip()
             url = WEBSITE_MAP.get(site)
-            
+
             if not url:
                 # If it's a domain/URL directly
                 if "." in site:
                     url = site if site.startswith(("http://", "https://")) else f"https://{site}"
                 else:
                     url = f"https://www.google.com/search?q={urllib.parse.quote(site)}"
-            
+
             subprocess.run(["open", url], check=True)
             return ExecutionResult(
                 status=ExecutionStatus.SUCCESS,
@@ -44,7 +45,7 @@ def execute_browser_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.BROWSER,
                 details={"url": url}
             )
-            
+
         elif action == "google_search":
             query = args.get("query", "").strip()
             if not query:
@@ -63,7 +64,7 @@ def execute_browser_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.BROWSER,
                 details={"query": query, "url": url}
             )
-            
+
         elif action == "youtube_search":
             query = args.get("query", "").strip()
             if not query:
@@ -82,7 +83,7 @@ def execute_browser_command(cmd: MacCommand) -> ExecutionResult:
                 category=CommandCategory.BROWSER,
                 details={"query": query, "url": url}
             )
-            
+
     except Exception as exc:
         return ExecutionResult(
             status=ExecutionStatus.FAILED,
@@ -90,7 +91,7 @@ def execute_browser_command(cmd: MacCommand) -> ExecutionResult:
             command_name="Browser Control",
             category=CommandCategory.BROWSER
         )
-        
+
     return ExecutionResult(
         status=ExecutionStatus.NOT_SUPPORTED,
         message=f"Unknown browser action: {action}",

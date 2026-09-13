@@ -8,11 +8,9 @@ post-action verification, and ComputerAgent orchestration.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from core.computer_agent import ComputerAgent
 from core.eyes import (
@@ -23,17 +21,13 @@ from core.eyes import (
     EyesInteractionManager,
     EyesStateVerifier,
     EyesTargetResolver,
-    MemoryFrame,
     NovaEyesManager,
     ScreenCapturer,
     ScreenState,
     SemanticElement,
     UIElementType,
-    VerificationOutcome,
     VisionOCR,
-    nova_eyes,
 )
-
 
 # =============================================================================
 # 1. DISPLAY METRICS & RETINA COORDINATES
@@ -213,7 +207,7 @@ def test_screen_state_fusion_and_deduplication() -> None:
     )
 
     state = ScreenState.build_from_sources(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         active_app="ShoppingApp",
         active_win="Checkout",
         metrics=metrics,
@@ -232,7 +226,7 @@ def test_screen_state_fusion_and_deduplication() -> None:
 def test_screen_state_change_detection() -> None:
     """Verify ScreenState detects meaningful visual or window transitions."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     state_a = ScreenState(
         timestamp=now,
@@ -299,7 +293,7 @@ def test_target_resolver_synonyms_and_scoring() -> None:
         is_input=True,
     )
     state = ScreenState(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         active_application="Browser",
         active_window="Store",
         metrics=metrics,
@@ -329,7 +323,7 @@ def test_target_resolver_ordinals() -> None:
     b3 = SemanticElement.create(UIElementType.BUTTON, "Result 3", 100.0, 200.0, 100.0, 30.0, element_id="3")
 
     state = ScreenState(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         active_application="App",
         active_window="List",
         metrics=metrics,
@@ -350,7 +344,7 @@ def test_target_resolver_ordinals() -> None:
 def test_verifier_never_fakes_success() -> None:
     """Verify that verifier rejects unchanged state when action produced no observable effect."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     btn = SemanticElement.create(UIElementType.BUTTON, "Apply Filter", 100.0, 100.0, 80.0, 30.0, element_id="b_apply")
 
@@ -381,7 +375,7 @@ def test_verifier_never_fakes_success() -> None:
 def test_verifier_detects_genuine_change() -> None:
     """Verify that verifier confirms success when visual hash or window title updates."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     btn = SemanticElement.create(UIElementType.BUTTON, "Save As", 100.0, 100.0, 80.0, 30.0, element_id="b_save")
 
@@ -410,7 +404,7 @@ def test_verifier_detects_genuine_change() -> None:
 def test_verifier_typing_confirmation() -> None:
     """Verify typing verifier confirms text inside focused field or visible OCR."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     field = SemanticElement.create(
         UIElementType.INPUT,
@@ -490,7 +484,7 @@ def test_nova_eyes_manager_lifecycle() -> None:
 def test_computer_agent_execute_goal_with_eyes() -> None:
     """Verify ComputerAgent orchestrates observe -> target resolve -> click -> verify pipeline."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     btn = SemanticElement.create(
         UIElementType.BUTTON,
@@ -533,7 +527,7 @@ def test_computer_agent_execute_goal_with_eyes() -> None:
 def test_computer_agent_low_confidence_asks_clarification() -> None:
     """Verify ComputerAgent asks clarification instead of clicking blindly when confidence is low."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     state = ScreenState(
         timestamp=now,
@@ -638,7 +632,7 @@ def test_screen_state_page_categorization() -> None:
     """Verify ScreenState automatically categorizes shopping, search, and coding contexts."""
     from core.eyes import PageCategory
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Shopping state
     st_shop = ScreenState.build_from_sources(
@@ -689,7 +683,7 @@ def test_proactive_assistance_engine_guardrails() -> None:
         ProductCandidate,
     )
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     engine = ProactiveAssistanceEngine(cooldown_seconds=60.0)
 
     # 1. Sensitive screen - must return None
@@ -751,7 +745,7 @@ def test_computer_agent_summarize_current_page() -> None:
     """Verify ComputerAgent summarizes the active page directly from current state."""
     from core.eyes import PageCategory, ProductCandidate
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     p1 = ProductCandidate(title="Road Runner", price="$89.99", rating="4.5 ★")
     p2 = ProductCandidate(title="Trail Blazer", price="$109.99", rating="4.8 ★")
@@ -777,7 +771,7 @@ def test_computer_agent_summarize_current_page() -> None:
 def test_computer_agent_what_is_at_cursor() -> None:
     """Verify ComputerAgent identifies the element located at current cursor position."""
     metrics = DisplayMetrics.get_primary_metrics()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     btn = SemanticElement.create(
         UIElementType.BUTTON,

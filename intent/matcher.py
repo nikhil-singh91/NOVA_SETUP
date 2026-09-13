@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from core.environment import environment_observer, ContextResolver
+
+from core.environment import ContextResolver, environment_observer
 from core.logger import get_logger
+
 from intent.models import CanonicalIntent, StructuredAction
 from intent.normalizer import NormalizedInput
 

@@ -25,11 +25,11 @@ Covers all 19 mandatory test commands:
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
-import pytest
 
+import pytest
+from core.task_agent.models import TaskContext
 from intent.models import CanonicalIntent
 from mac_control.models import CommandCategory, ExecutionResult, ExecutionStatus, MacCommand
-from core.task_agent.models import TaskContext
 from main import NovaApplication, TurnRequest
 from ui.health_checker import DashboardStatsManager
 

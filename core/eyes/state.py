@@ -8,10 +8,9 @@ Zero disk writes, strictly latest state in RAM.
 
 from __future__ import annotations
 
-import re
 import urllib.parse
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -116,7 +115,7 @@ class ScreenState:
 
     @property
     def age_seconds(self) -> float:
-        return (datetime.now(timezone.utc) - self.timestamp).total_seconds()
+        return (datetime.now(UTC) - self.timestamp).total_seconds()
 
     def is_fresh(self, max_age_seconds: float = 3.0) -> bool:
         return self.age_seconds <= max_age_seconds

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import math
 import numpy as np
 import pytest
-
-from voice.commands import CommandRecognizer, VoiceCommandRouter
+from voice.commands import VoiceCommandRouter
 from voice.manager import VoiceManager
 from voice.quality import TranscriptQualityGate
-from voice.state import QualityDecision, TranscriptionResult, VoiceState
-
+from voice.state import QualityDecision, TranscriptionResult
 
 # ==============================================================================
 # TEST 1: Rejection of Cough / Noise / High No-Speech Probability
