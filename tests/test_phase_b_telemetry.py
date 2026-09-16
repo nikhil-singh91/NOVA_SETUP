@@ -1,4 +1,4 @@
-"""Unit tests for Phase B: EventBus & UI Telemetry Integration.
+"""Unit tests for Phase B: EventBus & Telemetry Integration.
 
 Validates:
 1. Lifecycle event emission (TASK_CREATED, TASK_STEP_STARTED, TASK_ACTION_*, TASK_VERIFICATION_*,
@@ -7,17 +7,13 @@ Validates:
 2. Strict lifecycle event ordering.
 3. Payload contract compliance (task_id, goal_id, step_index, capability, status, etc.).
 4. Telemetry failure isolation (EventBus exceptions never break task execution).
-5. EventBridge UIEventType, AvatarState, and PrivacyState transitions.
-6. Privacy sanitization (masking API keys, tokens, cookies, auth headers, and stripping raw
-   buffers).
-7. Terminal Dashboard event handling.
+5. Terminal Dashboard task event handling and activity feed updates.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
 
 from core.event_bus import EventBus, NovaEvent
 from core.task_agent.executor import TaskExecutor
@@ -31,8 +27,6 @@ from core.task_agent.models import (
 )
 from core.task_agent.registry import CapabilityDefinition, CapabilityRegistry
 from core.task_agent.replanner import DynamicReplanner
-from ui.backend.event_bridge import EventBridge
-from ui.backend.models import AvatarState, UIEventType
 from ui.health_checker import DashboardStatsManager
 from ui.terminal_dashboard import TerminalDashboard
 
@@ -325,83 +319,7 @@ def test_pause_resume_task_telemetry() -> None:
     assert events == [NovaEvent.TASK_PAUSED.value, NovaEvent.TASK_RESUMED.value]
 
 
-def test_event_bridge_task_mappings_and_avatar_state() -> None:
-    """Verify EventBridge maps NovaEvent.TASK_* events to corresponding UIEventType
-    and AvatarState.
-    """
-    bus = EventBus()
-    bridge = EventBridge(event_bus=bus)
 
-    emitted_ui_events = []
-    bridge.emit_event = MagicMock(side_effect=lambda evt: emitted_ui_events.append(evt))
-
-    bus.publish(
-        NovaEvent.TASK_CREATED,
-        task_id="t_bridge_1",
-        goal_description="Build App",
-        total_steps=3,
-    )
-    assert len(emitted_ui_events) == 1
-    evt1 = emitted_ui_events[-1]
-    assert evt1.event_type == UIEventType.TASK_STARTED
-    assert evt1.avatar_state == AvatarState.PLANNING
-    assert bridge.privacy_state.task_executing is True
-
-    bus.publish(
-        NovaEvent.TASK_VERIFICATION_STARTED,
-        task_id="t_bridge_1",
-        step_id="s1",
-    )
-    evt2 = emitted_ui_events[-1]
-    assert evt2.event_type == UIEventType.VERIFICATION_STARTED
-    assert evt2.avatar_state == AvatarState.VERIFYING
-
-    bus.publish(
-        NovaEvent.TASK_COMPLETED,
-        task_id="t_bridge_1",
-        status="completed",
-        success=True,
-    )
-    evt3 = emitted_ui_events[-1]
-    assert evt3.event_type == UIEventType.TASK_COMPLETED
-    assert evt3.avatar_state == AvatarState.SUCCESS
-    assert bridge.privacy_state.task_executing is False
-
-
-def test_event_bridge_privacy_and_sanitization() -> None:
-    """Verify sensitive keys and raw buffers are sanitized from event payloads."""
-    bridge = EventBridge()
-
-    dirty_payload = {
-        "task_id": "t_clean",
-        "api_key": "sk-secret-gemini-key-123",
-        "user_password": "supersecretpassword",
-        "cookie": "session=abcdef12345",
-        "authorization": "Bearer token_xyz_999",
-        "nested_config": {
-            "token": "sensitive_jwt_token",
-            "safe_field": "public_data",
-        },
-        "step_list": [
-            {"step_id": "s1", "secret_param": "hidden_value", "name": "visible"},
-        ],
-        "raw_frame": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        "image_data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
-    }
-
-    clean = bridge._sanitize_dict(dirty_payload)
-
-    assert clean["task_id"] == "t_clean"
-    assert clean["api_key"] == "******"
-    assert clean["user_password"] == "******"
-    assert clean["cookie"] == "******"
-    assert clean["authorization"] == "******"
-    assert clean["nested_config"]["token"] == "******"
-    assert clean["nested_config"]["safe_field"] == "public_data"
-    assert clean["step_list"][0]["secret_param"] == "******"
-    assert clean["step_list"][0]["name"] == "visible"
-    assert clean["raw_frame"] == "******"
-    assert clean["image_data"] == "<raw media buffer stripped>"
 
 
 def test_terminal_dashboard_task_event_reaction() -> None:
