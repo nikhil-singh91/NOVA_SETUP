@@ -298,6 +298,76 @@ class StartupError(NovaError):
     default_message: str = "NOVA failed to start up correctly."
 
 
+# =============================================================================
+# AGENT RUNTIME ERROR HIERARCHY (PHASE A)
+# =============================================================================
+
+
+class AgentRuntimeError(NovaError):
+    """Base exception for all agent runtime and autonomous task failures."""
+
+    default_message: str = "An error occurred within the Agent Runtime."
+
+
+class CapabilityUnavailableError(AgentRuntimeError):
+    """Raised when a requested capability is not registered or unavailable."""
+
+    default_message: str = "The requested capability is not available or registered."
+
+
+class PermissionRequiredError(AgentRuntimeError, PermissionDeniedError):
+    """Raised when an autonomous step requires permissions that have not been granted."""
+
+    default_message: str = (
+        "The requested agent operation requires permissions that have not been granted."
+    )
+
+
+class DependencyMissingError(AgentRuntimeError):
+    """Raised when a task step requires an external dependency or tool that is not installed."""
+
+    default_message: str = "A required dependency for the task is missing on the system."
+
+
+class ActionExecutionError(AgentRuntimeError):
+    """Raised when a capability handler raises an unhandled error during execution."""
+
+    default_message: str = "An error occurred during capability execution."
+
+
+class VerificationFailedError(AgentRuntimeError):
+    """Raised when post-action verification fails to confirm the expected effect."""
+
+    default_message: str = "Post-action verification failed to confirm the expected outcome."
+
+
+class ObservationTimeoutError(AgentRuntimeError):
+    """Raised when environment or screen observation fails to return within the timeout budget."""
+
+    default_message: str = "Observation of system or screen state timed out."
+
+
+class PolicyViolationError(AgentRuntimeError):
+    """Raised when an action violates safety policies (e.g. sandbox or sensitive web action)."""
+
+    default_message: str = "The requested action violates an active safety policy."
+
+
+class TaskBudgetExceededError(AgentRuntimeError):
+    """Raised when a task exceeds its allocated duration, step count, or retry budget."""
+
+    default_message: str = "The task exceeded its allocated execution budget."
+
+
+class AmbiguousGoalError(AgentRuntimeError):
+    """Raised when a user goal or target reference cannot be resolved unambiguously."""
+
+    default_message: str = (
+        "The goal or target reference is ambiguous and requires user clarification."
+    )
+
+
+
 __all__ = [
     "NovaError",
     "ConfigurationError",
@@ -321,4 +391,15 @@ __all__ = [
     "FileOperationError",
     "DatabaseError",
     "StartupError",
+    "AgentRuntimeError",
+    "CapabilityUnavailableError",
+    "PermissionRequiredError",
+    "DependencyMissingError",
+    "ActionExecutionError",
+    "VerificationFailedError",
+    "ObservationTimeoutError",
+    "PolicyViolationError",
+    "TaskBudgetExceededError",
+    "AmbiguousGoalError",
 ]
+

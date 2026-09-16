@@ -2,7 +2,11 @@
 
 from core.task_agent.executor import TaskExecutor, task_executor
 from core.task_agent.models import (
+    ExecutionBudget,
     FailureType,
+    GoalCriteria,
+    RecoveryAction,
+    RecoveryDecision,
     RiskLevel,
     StepStatus,
     TaskContext,
@@ -11,6 +15,8 @@ from core.task_agent.models import (
     TaskResult,
     TaskStatus,
     TaskStep,
+    VerificationResult,
+    VerificationStatus,
 )
 from core.task_agent.planner import TaskPlanner
 from core.task_agent.registry import CapabilityDefinition, CapabilityRegistry, capability_registry
@@ -33,4 +39,11 @@ __all__ = [
     "FailureType",
     "TaskContext",
     "TaskResult",
+    "GoalCriteria",
+    "ExecutionBudget",
+    "VerificationStatus",
+    "VerificationResult",
+    "RecoveryAction",
+    "RecoveryDecision",
 ]
+

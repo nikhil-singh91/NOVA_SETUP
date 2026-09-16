@@ -48,6 +48,26 @@ class NovaEvent(str, Enum):
     CAMERA_CAPTURE_COMPLETED = "camera_capture_completed"
     CAMERA_CAPTURE_FAILED = "camera_capture_failed"
 
+    # Task Lifecycle (Agent Runtime)
+    TASK_CREATED = "task_created"
+    TASK_UNDERSTANDING = "task_understanding"
+    TASK_PLANNING = "task_planning"
+    TASK_OBSERVING = "task_observing"
+    TASK_STEP_STARTED = "task_step_started"
+    TASK_ACTION_STARTED = "task_action_started"
+    TASK_ACTION_COMPLETED = "task_action_completed"
+    TASK_VERIFICATION_STARTED = "task_verification_started"
+    TASK_VERIFICATION_COMPLETED = "task_verification_completed"
+    TASK_RECOVERY_STARTED = "task_recovery_started"
+    TASK_REPLANNING = "task_replanning"
+    TASK_WAITING_USER = "task_waiting_user"
+    TASK_PAUSED = "task_paused"
+    TASK_RESUMED = "task_resumed"
+    TASK_COMPLETED = "task_completed"
+    TASK_FAILED = "task_failed"
+    TASK_CANCELLED = "task_cancelled"
+
+
 
 class EventBus:
     """Thread-safe publish/subscribe mechanism."""
