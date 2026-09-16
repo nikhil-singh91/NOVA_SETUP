@@ -83,6 +83,20 @@ class TerminalDashboard:
                     bus.subscribe(NovaEvent.BROWSER_ACTION_COMPLETED, self.handle_event)
                     bus.subscribe(NovaEvent.DESKTOP_ACTION_STARTED, self.handle_event)
                     bus.subscribe(NovaEvent.DESKTOP_ACTION_COMPLETED, self.handle_event)
+                    for task_evt in (
+                        NovaEvent.TASK_CREATED,
+                        NovaEvent.TASK_STEP_STARTED,
+                        NovaEvent.TASK_ACTION_STARTED,
+                        NovaEvent.TASK_ACTION_COMPLETED,
+                        NovaEvent.TASK_VERIFICATION_STARTED,
+                        NovaEvent.TASK_VERIFICATION_COMPLETED,
+                        NovaEvent.TASK_RECOVERY_STARTED,
+                        NovaEvent.TASK_REPLANNING,
+                        NovaEvent.TASK_COMPLETED,
+                        NovaEvent.TASK_FAILED,
+                        NovaEvent.TASK_CANCELLED,
+                    ):
+                        bus.subscribe(task_evt, self.handle_event)
             except Exception as e:
                 logger.warning("Failed to subscribe dashboard to event bus: %s", e)
 
@@ -256,6 +270,99 @@ class TerminalDashboard:
                 DashboardStatsManager.update("command_status", cmd_status)
                 DashboardStatsManager.update("command_result", cmd_result)
                 DashboardStatsManager.update("current_task", f"Completed: {cmd_name}")
+
+            # Task Lifecycle Events (Phase B Telemetry)
+            elif event_name == NovaEvent.TASK_CREATED.value:
+                desc = (
+                    payload.get("goal_description")
+                    or payload.get("message")
+                    or "New Task"
+                )
+                DashboardStatsManager.update("current_task", f"Task: {desc[:40]}")
+
+            elif event_name == NovaEvent.TASK_STEP_STARTED.value:
+                s_idx = payload.get("step_index", 1)
+                t_steps = payload.get("total_steps", 1)
+                desc = payload.get("description", "")
+                DashboardStatsManager.update(
+                    "current_task", f"Task {s_idx}/{t_steps}: {desc[:35]}"
+                )
+
+            elif event_name == NovaEvent.TASK_ACTION_STARTED.value:
+                cap = payload.get("capability", "action")
+                s_idx = payload.get("step_index")
+                t_steps = payload.get("total_steps")
+                DashboardStatsManager.record_action(
+                    action_text=f"ACTION {cap}",
+                    step_num=s_idx,
+                    total_steps=t_steps,
+                    details=payload,
+                )
+
+            elif event_name == NovaEvent.TASK_VERIFICATION_STARTED.value:
+                desc = payload.get("message") or "Verifying..."
+                DashboardStatsManager.update("current_task", f"VERIFY: {desc[:35]}")
+
+            elif event_name == NovaEvent.TASK_VERIFICATION_COMPLETED.value:
+                ok = bool(payload.get("success", False))
+                msg = payload.get("message") or (
+                    "Verification passed" if ok else "Verification failed"
+                )
+                DashboardStatsManager.record_verify(
+                    verify_text=f"VERIFY: {msg}",
+                    success=ok,
+                    details=payload,
+                )
+
+            elif event_name == NovaEvent.TASK_RECOVERY_STARTED.value:
+                action = payload.get("recovery_action", "retry")
+                msg = payload.get("message") or f"RECOVERING: {action}"
+                DashboardStatsManager.update("current_task", f"RECOVERING: {msg[:35]}")
+                DashboardStatsManager.record_action(
+                    action_text=f"RECOVERING: {msg}",
+                    details=payload,
+                )
+
+            elif event_name == NovaEvent.TASK_REPLANNING.value:
+                cycle = payload.get("replan_cycle", 1)
+                DashboardStatsManager.update(
+                    "current_task", f"REPLANNING: cycle {cycle}"
+                )
+                DashboardStatsManager.record_understood(
+                    intent="REPLANNING",
+                    summary=f"Replanning cycle {cycle}",
+                    details=payload,
+                )
+
+            elif event_name == NovaEvent.TASK_COMPLETED.value:
+                msg = payload.get("message") or "Task completed successfully"
+                DashboardStatsManager.record_result(
+                    result_text=msg,
+                    success=True,
+                    details=payload,
+                )
+                DashboardStatsManager.update("current_task", "TASK COMPLETE")
+
+            elif event_name == NovaEvent.TASK_FAILED.value:
+                err = (
+                    payload.get("error")
+                    or payload.get("message")
+                    or "Task failed"
+                )
+                DashboardStatsManager.record_error(
+                    error_text=err,
+                    details=payload,
+                )
+                DashboardStatsManager.update("current_task", "TASK FAILED")
+
+            elif event_name == NovaEvent.TASK_CANCELLED.value:
+                msg = payload.get("message") or "Task was cancelled"
+                DashboardStatsManager.record_result(
+                    result_text=msg,
+                    success=False,
+                    details=payload,
+                )
+                DashboardStatsManager.update("current_task", "TASK CANCELLED")
 
             self.draw_dashboard()
         except Exception as e:

@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.event_bus import EventBus, NovaEvent
 from core.logger import get_logger
 from core.task_agent.models import (
     StepStatus,
@@ -35,24 +36,82 @@ def log_task_agent_debug(stage: str, details: dict[str, Any]) -> None:
 
 
 class TaskExecutor:
-    """Executes structured TaskPlans with dynamic parameter binding, step verification, and replanning."""
+    """Executes structured TaskPlans with dynamic parameter binding, step verification,
+    and replanning.
+    """
 
     def __init__(
         self,
         registry: CapabilityRegistry | None = None,
         replanner: DynamicReplanner | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
         self.registry = registry or capability_registry
         self.replanner = replanner or DynamicReplanner(self.registry)
+        self._event_bus: EventBus | None = event_bus
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._lock = threading.Lock()
         self.current_context: TaskContext | None = None
 
+    @property
+    def event_bus(self) -> EventBus | None:
+        """Access the current EventBus, falling back to the service registry if available."""
+        if self._event_bus is not None:
+            return self._event_bus
+        try:
+            from core.registry import registry as global_registry
+
+            if global_registry.exists("event_bus"):
+                return global_registry.get("event_bus")
+        except Exception:
+            pass
+        return None
+
+    @event_bus.setter
+    def event_bus(self, bus: EventBus | None) -> None:
+        self._event_bus = bus
+
+    def _safe_publish(self, event: NovaEvent, **payload: Any) -> None:
+        """Safely publish telemetry to EventBus without risking task execution."""
+        try:
+            bus = self.event_bus
+            if bus is not None:
+                bus.publish(event, **payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Telemetry publish failed for event '%s': %s", event.value, exc)
+
     def cancel_task(self) -> bool:
         """Interrupt and cancel any running autonomous task."""
         self._stop_event.set()
+        self._pause_event.clear()
         logger.info("TaskExecutor stop requested.")
+        return True
+
+    def pause_task(self) -> bool:
+        """Pause task execution loop."""
+        self._pause_event.set()
+        task_id = self.current_context.task_id if self.current_context else ""
+        self._safe_publish(
+            NovaEvent.TASK_PAUSED,
+            task_id=task_id,
+            status="paused",
+            timestamp=time.time(),
+            message="Task execution paused.",
+        )
+        return True
+
+    def resume_task(self) -> bool:
+        """Resume task execution loop."""
+        self._pause_event.clear()
+        task_id = self.current_context.task_id if self.current_context else ""
+        self._safe_publish(
+            NovaEvent.TASK_RESUMED,
+            task_id=task_id,
+            status="running",
+            timestamp=time.time(),
+            message="Task execution resumed.",
+        )
         return True
 
     def reset_cancellation(self) -> None:
@@ -64,7 +123,7 @@ class TaskExecutor:
     # PRIMARY EXECUTION ENGINE
     # =========================================================================
 
-    def execute_plan(
+    def execute_plan(  # noqa: C901
         self,
         plan: TaskPlan,
         context: TaskContext | None = None,
@@ -73,9 +132,24 @@ class TaskExecutor:
         """Execute a TaskPlan step-by-step with verification and dynamic recovery."""
         ctx = context or TaskContext(task_id=plan.task_id)
         self.current_context = ctx
+        goal_id = (
+            getattr(plan.goal, "goal_id", None)
+            or getattr(plan.goal, "task_id", None)
+            or plan.task_id
+        )
 
         if self._stop_event.is_set():
             plan.status = TaskStatus.CANCELLED
+            self._safe_publish(
+                NovaEvent.TASK_CANCELLED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                status="cancelled",
+                completed_steps=0,
+                total_steps=len(plan.steps),
+                message="Task was cancelled by user.",
+                timestamp=time.time(),
+            )
             return TaskResult(
                 task_id=plan.task_id,
                 success=False,
@@ -96,7 +170,32 @@ class TaskExecutor:
             "steps_count": len(plan.steps),
         })
 
+        self._safe_publish(
+            NovaEvent.TASK_CREATED,
+            task_id=plan.task_id,
+            goal_id=goal_id,
+            goal_description=plan.goal.goal_description,
+            total_steps=len(plan.steps),
+            status="running",
+            progress_percent=0.0,
+            timestamp=time.time(),
+            message=f"Starting task: {plan.goal.goal_description}",
+        )
+
         if not plan.steps:
+            self._safe_publish(
+                NovaEvent.TASK_COMPLETED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                status="completed",
+                completed_steps=0,
+                total_steps=0,
+                success=True,
+                progress_percent=100.0,
+                final_verification_passed=True,
+                message="No executable steps required.",
+                timestamp=time.time(),
+            )
             return TaskResult(
                 task_id=plan.task_id,
                 success=True,
@@ -113,10 +212,27 @@ class TaskExecutor:
         max_replan_cycles = 3
 
         while step_queue:
+            # 0. Pause Check
+            while self._pause_event.is_set() and not self._stop_event.is_set():
+                time.sleep(0.05)
+
             # 1. Cancellation Check
             if self._stop_event.is_set():
                 plan.status = TaskStatus.CANCELLED
-                log_task_agent_debug("TASK_CANCELLED", {"task_id": plan.task_id, "completed": completed_count})
+                log_task_agent_debug(
+                    "TASK_CANCELLED",
+                    {"task_id": plan.task_id, "completed": completed_count},
+                )
+                self._safe_publish(
+                    NovaEvent.TASK_CANCELLED,
+                    task_id=plan.task_id,
+                    goal_id=goal_id,
+                    status="cancelled",
+                    completed_steps=completed_count,
+                    total_steps=len(plan.steps),
+                    message="Task was cancelled by user.",
+                    timestamp=time.time(),
+                )
                 return TaskResult(
                     task_id=plan.task_id,
                     success=False,
@@ -133,16 +249,54 @@ class TaskExecutor:
             current_step.status = StepStatus.RUNNING
             current_step.started_at = datetime.now(UTC)
 
+            # Deterministic step index and progress percentage
+            step_idx = completed_count + 1
+            tot_steps = len(plan.steps)
+            prog_pct = round((completed_count / max(1, tot_steps)) * 100.0, 1)
+
+            self._safe_publish(
+                NovaEvent.TASK_STEP_STARTED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                step_id=current_step.step_id,
+                step_index=step_idx,
+                total_steps=tot_steps,
+                capability=current_step.capability_name,
+                description=current_step.description,
+                status="running",
+                progress_percent=prog_pct,
+                timestamp=time.time(),
+                message=f"Step {step_idx}/{tot_steps}: {current_step.description}",
+            )
+
             # 2. Dependency Validation
             if not plan.are_dependencies_met(current_step):
                 current_step.status = StepStatus.FAILED
                 current_step.error_message = "Prerequisite steps have not completed."
+                plan.status = TaskStatus.FAILED
+                self._safe_publish(
+                    NovaEvent.TASK_FAILED,
+                    task_id=plan.task_id,
+                    goal_id=goal_id,
+                    step_id=current_step.step_id,
+                    step_index=step_idx,
+                    total_steps=tot_steps,
+                    capability=current_step.capability_name,
+                    status="failed",
+                    error=current_step.error_message,
+                    failure_category="dependency_unmet",
+                    completed_steps=completed_count,
+                    timestamp=time.time(),
+                    message=f"Step '{current_step.step_id}' failed: dependencies unmet.",
+                )
                 return TaskResult(
                     task_id=plan.task_id,
                     success=False,
                     status=TaskStatus.FAILED,
                     message=f"Step '{current_step.step_id}' failed: dependencies unmet.",
-                    spoken_response=f"Task could not proceed: {current_step.description} was blocked.",
+                    spoken_response=(
+                        f"Task could not proceed: {current_step.description} was blocked."
+                    ),
                     failed_step=current_step,
                     context=ctx,
                 )
@@ -164,7 +318,25 @@ class TaskExecutor:
             cap_def = self.registry.get(current_step.capability_name)
             if not cap_def:
                 current_step.status = StepStatus.FAILED
-                current_step.error_message = f"Capability '{current_step.capability_name}' not registered."
+                current_step.error_message = (
+                    f"Capability '{current_step.capability_name}' not registered."
+                )
+                plan.status = TaskStatus.FAILED
+                self._safe_publish(
+                    NovaEvent.TASK_FAILED,
+                    task_id=plan.task_id,
+                    goal_id=goal_id,
+                    step_id=current_step.step_id,
+                    step_index=step_idx,
+                    total_steps=tot_steps,
+                    capability=current_step.capability_name,
+                    status="failed",
+                    error=current_step.error_message,
+                    failure_category="capability_not_found",
+                    completed_steps=completed_count,
+                    timestamp=time.time(),
+                    message=current_step.error_message,
+                )
                 return TaskResult(
                     task_id=plan.task_id,
                     success=False,
@@ -178,19 +350,90 @@ class TaskExecutor:
             step_success = False
             exec_result: dict[str, Any] = {}
 
+            self._safe_publish(
+                NovaEvent.TASK_ACTION_STARTED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                step_id=current_step.step_id,
+                step_index=step_idx,
+                total_steps=tot_steps,
+                capability=current_step.capability_name,
+                description=current_step.description,
+                status="executing",
+                timestamp=time.time(),
+                message=f"Executing {current_step.capability_name}",
+            )
+
+            action_start = time.monotonic()
             try:
                 exec_result = cap_def.handler(bound_params, ctx)
                 step_success = bool(exec_result.get("success", False))
                 current_step.result_data = exec_result
-
-                # 6. Step-Level Verification
-                if step_success and cap_def.verifier:
-                    step_success = cap_def.verifier(bound_params, exec_result, ctx)
-
             except Exception as exc:
                 logger.error("Exception during step '%s': %s", current_step.step_id, exc)
                 step_success = False
                 exec_result = {"success": False, "error": str(exc)}
+
+            action_elapsed = time.monotonic() - action_start
+
+            self._safe_publish(
+                NovaEvent.TASK_ACTION_COMPLETED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                step_id=current_step.step_id,
+                step_index=step_idx,
+                total_steps=tot_steps,
+                capability=current_step.capability_name,
+                success=step_success,
+                status="action_completed" if step_success else "action_failed",
+                execution_time_seconds=round(action_elapsed, 4),
+                timestamp=time.time(),
+                message=(
+                    f"Action {current_step.capability_name} "
+                    f"{'succeeded' if step_success else 'failed'}"
+                ),
+            )
+
+            # 6. Step-Level Verification
+            if step_success and cap_def.verifier:
+                self._safe_publish(
+                    NovaEvent.TASK_VERIFICATION_STARTED,
+                    task_id=plan.task_id,
+                    goal_id=goal_id,
+                    step_id=current_step.step_id,
+                    step_index=step_idx,
+                    total_steps=tot_steps,
+                    verification_type=current_step.verification_type or "capability_verifier",
+                    status="verifying",
+                    timestamp=time.time(),
+                    message=f"Verifying step {step_idx}: {current_step.description}",
+                )
+                try:
+                    step_success = cap_def.verifier(bound_params, exec_result, ctx)
+                except Exception as ver_exc:
+                    logger.error(
+                        "Exception during verification of step '%s': %s",
+                        current_step.step_id,
+                        ver_exc,
+                    )
+                    step_success = False
+
+                self._safe_publish(
+                    NovaEvent.TASK_VERIFICATION_COMPLETED,
+                    task_id=plan.task_id,
+                    goal_id=goal_id,
+                    step_id=current_step.step_id,
+                    step_index=step_idx,
+                    total_steps=tot_steps,
+                    success=step_success,
+                    status="verified" if step_success else "verification_failed",
+                    timestamp=time.time(),
+                    message=(
+                        f"Verification passed for {current_step.description}"
+                        if step_success
+                        else f"Verification failed for {current_step.description}"
+                    ),
+                )
 
             # 7. Evaluate Step Outcome & Replanning
             if step_success:
@@ -214,6 +457,24 @@ class TaskExecutor:
 
                 # Check Retry Eligibility
                 if self.replanner.can_retry_step(current_step, fail_type):
+                    self._safe_publish(
+                        NovaEvent.TASK_RECOVERY_STARTED,
+                        task_id=plan.task_id,
+                        goal_id=goal_id,
+                        step_id=current_step.step_id,
+                        step_index=step_idx,
+                        total_steps=tot_steps,
+                        failure_type=fail_type.value,
+                        retry_count=current_step.retry_count,
+                        max_retries=current_step.max_retries,
+                        recovery_action="retry",
+                        status="recovering",
+                        timestamp=time.time(),
+                        message=(
+                            f"Retrying step {step_idx} (attempt {current_step.retry_count}):"
+                            f" {err_msg}"
+                        ),
+                    )
                     time.sleep(0.3)
                     step_queue.insert(0, current_step)  # Re-enqueue for retry
                     continue
@@ -221,7 +482,23 @@ class TaskExecutor:
                 # Check Dynamic Replanning
                 if replan_cycles < max_replan_cycles:
                     replan_cycles += 1
-                    sub_steps = self.replanner.replan_failed_step(plan, current_step, fail_type, ctx)
+                    self._safe_publish(
+                        NovaEvent.TASK_REPLANNING,
+                        task_id=plan.task_id,
+                        goal_id=goal_id,
+                        step_id=current_step.step_id,
+                        step_index=step_idx,
+                        total_steps=tot_steps,
+                        failure_type=fail_type.value,
+                        replan_cycle=replan_cycles,
+                        max_replan_cycles=max_replan_cycles,
+                        status="replanning",
+                        timestamp=time.time(),
+                        message=f"Replanning around failed step {step_idx}: {err_msg}",
+                    )
+                    sub_steps = self.replanner.replan_failed_step(
+                        plan, current_step, fail_type, ctx
+                    )
                     if sub_steps:
                         log_task_agent_debug("REPLAN_SUBSTITUTED", {
                             "replan_cycle": replan_cycles,
@@ -233,6 +510,21 @@ class TaskExecutor:
                 # Fatal Step Failure
                 current_step.status = StepStatus.FAILED
                 plan.status = TaskStatus.FAILED
+                self._safe_publish(
+                    NovaEvent.TASK_FAILED,
+                    task_id=plan.task_id,
+                    goal_id=goal_id,
+                    step_id=current_step.step_id,
+                    step_index=step_idx,
+                    total_steps=tot_steps,
+                    capability=current_step.capability_name,
+                    error=err_msg,
+                    failure_category=fail_type.value,
+                    status="failed",
+                    completed_steps=completed_count,
+                    timestamp=time.time(),
+                    message=f"Step '{current_step.description}' failed: {err_msg}",
+                )
                 return TaskResult(
                     task_id=plan.task_id,
                     success=False,
@@ -251,7 +543,41 @@ class TaskExecutor:
         log_task_agent_debug("FINAL_VERIFICATION", {"passed": final_ok})
 
         plan.status = TaskStatus.COMPLETED if final_ok else TaskStatus.FAILED
-        spoken_msg = f"Task completed: {plan.goal.goal_description}" if final_ok else "Task finished with verification warnings."
+        spoken_msg = (
+            f"Task completed: {plan.goal.goal_description}"
+            if final_ok
+            else "Task finished with verification warnings."
+        )
+
+        if final_ok:
+            self._safe_publish(
+                NovaEvent.TASK_COMPLETED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                status="completed",
+                success=True,
+                completed_steps=completed_count,
+                total_steps=len(plan.steps),
+                progress_percent=100.0,
+                final_verification_passed=True,
+                timestamp=time.time(),
+                message=f"Task completed successfully: {plan.goal.goal_description}",
+            )
+        else:
+            self._safe_publish(
+                NovaEvent.TASK_FAILED,
+                task_id=plan.task_id,
+                goal_id=goal_id,
+                status="failed",
+                success=False,
+                completed_steps=completed_count,
+                total_steps=len(plan.steps),
+                final_verification_passed=False,
+                error="Final goal verification failed.",
+                failure_category="goal_verification_failed",
+                timestamp=time.time(),
+                message="Task finished with verification warnings: final goal checks failed.",
+            )
 
         return TaskResult(
             task_id=plan.task_id,
@@ -270,7 +596,9 @@ class TaskExecutor:
     # =========================================================================
 
     def _bind_parameters(self, params: dict[str, Any], ctx: TaskContext) -> dict[str, Any]:
-        """Resolve dynamic variables and deictic references ('it', 'parent_path') using TaskContext."""
+        """Resolve dynamic variables and deictic references ('it', 'parent_path')
+        using TaskContext.
+        """
         bound = dict(params)
         for k, v in bound.items():
             if isinstance(v, str):
@@ -284,7 +612,9 @@ class TaskExecutor:
         return bound
 
     def _verify_final_goal(self, plan: TaskPlan, ctx: TaskContext) -> bool:
-        """Verify that holistic criteria (files/folders created by this plan) exist on the system."""
+        """Verify that holistic criteria (files/folders created by this plan)
+        exist on the system.
+        """
         for step in plan.steps:
             if step.status == StepStatus.COMPLETED and step.result_data.get("path"):
                 p = Path(step.result_data["path"])

@@ -151,6 +151,18 @@ export const App: React.FC = () => {
         setPrivacyState((p) => ({ ...p, task_executing: true }));
         break;
 
+      case 'task_step_started':
+        setActiveTask((prev) => {
+          if (!prev) return null;
+          const sIdx = (event.data?.step_index as number) ?? prev.current_step_index;
+          return {
+            ...prev,
+            current_step_index: sIdx,
+            status: 'running',
+          };
+        });
+        break;
+
       case 'task_step_completed':
         if (activeTask) {
           setActiveTask((prev) => {
@@ -161,6 +173,15 @@ export const App: React.FC = () => {
             };
           });
         }
+        break;
+
+      case 'task_step_failed':
+        setActiveTask((prev) => (prev ? { ...prev, status: 'failed' } : null));
+        setPrivacyState((p) => ({ ...p, task_executing: false }));
+        break;
+
+      case 'task_replanning':
+        setActiveTask((prev) => (prev ? { ...prev, status: 'running' } : null));
         break;
 
       case 'task_completed':
